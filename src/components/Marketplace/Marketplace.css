@@ -219,6 +219,53 @@
   margin-bottom: 14px;
 }
 
+/* Product photo picker inside the "New Listing" form */
+.mp-image-upload {
+  width: 100%;
+  height: 160px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.mp-image-upload:hover {
+  border-color: var(--color-primary);
+}
+
+.mp-image-upload-hint {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.mp-image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Photo shown on each listing card */
+.mp-card-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.mp-card-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  font-size: 2.4rem;
+}
+
 /* Two-column row inside the form */
 .mp-row {
   display: grid;

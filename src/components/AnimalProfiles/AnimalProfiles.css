@@ -27,6 +27,53 @@
   margin-bottom: 14px;
 }
 
+/* Photo picker inside the "New Animal Profile" form */
+.ap-image-upload {
+  width: 100%;
+  height: 160px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.ap-image-upload:hover {
+  border-color: var(--color-primary);
+}
+
+.ap-image-upload-hint {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.ap-image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Photo shown on each animal card */
+.ap-card-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.ap-card-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  font-size: 2.4rem;
+}
+
 /* Age / Weight side-by-side */
 .ap-row {
   display: grid;

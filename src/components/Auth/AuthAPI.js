@@ -1,149 +1,84 @@
-// ─── AuthAPI.js — Sign Up, Sign In, Sign Out via Supabase Auth ────────────────
+import client, { setToken, clearToken, getToken } from '../../api/client';
 
-import { supabase } from '../../supabase/supabaseClient';
-
-
-// ── validateAuthInputs ────────────────────────────────────────────────────────
-// Validates email and password on the client BEFORE sending them to Supabase.
-// Client-side validation gives instant feedback without a network round-trip.
-//
-// @param email    — string entered in the email field
-// @param password — string entered in the password field
-// @returns        — an errors object ({ email?: string, password?: string })
-//                   Returns null if everything is valid.
-export function validateAuthInputs(email, password) {
-  const errors = {};
-
-  // ── Email check ───────────────────────────────────────────────────────────
-  if (!email || !email.trim()) {
-    // Empty string or whitespace only — reject immediately.
-    errors.email = 'Email is required.';
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-    // Regex breakdown:
-    //   ^[^\s@]+   — one or more chars that are NOT space or @  (the local part)
-    //   @          — the @ symbol
-    //   [^\s@]+    — one or more chars that are NOT space or @  (domain name)
-    //   \.         — a literal dot
-    //   [^\s@]+$   — one or more chars that are NOT space or @  (TLD)
-    // This catches the most obvious invalid emails without being overly strict.
-    errors.email = 'Please enter a valid email address.';
-  }
-
-  // ── Password check ────────────────────────────────────────────────────────
-  if (!password) {
-    errors.password = 'Password is required.';
-  } else if (password.length < 6) {
-    // Supabase enforces a minimum of 6 characters by default.
-    // We mirror that rule here so the user sees the error before the API call.
-    errors.password = 'Password must be at least 6 characters.';
-  }
-
-  // Return null when there are no errors (cleaner than returning an empty object).
-  return Object.keys(errors).length > 0 ? errors : null;
+function normalizeUser(user) {
+  return user
+    ? { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl }
+    : null;
 }
 
-
-// ── signUp ────────────────────────────────────────────────────────────────────
-// Registers a new user account.
-//
-// @param email    — unique email address (used to log in)
-// @param password — chosen password (Supabase hashes it; we never store it)
-// @param fullName — display name stored in user metadata
-//
-// Returns: { user, session }
-//   user    — the new auth.users row (id, email, created_at, user_metadata)
-//   session — null until the user confirms their email (if confirmation is on)
-//
-// Throws: if the email is already registered or inputs are invalid.
+// Creates a new account and stores the session token.
 export async function signUp(email, password, fullName) {
-  // Run client-side validation first to catch obvious errors cheaply.
-  const errors = validateAuthInputs(email, password);
-  if (errors) {
-    // Convert the errors object to a single readable string and throw.
-    const message = Object.values(errors).join(' ');
-    throw new Error(message);
-  }
-
-  const { data, error } = await supabase.auth.signUp({
-    email:    email.trim(),
-    password: password,
-    options: {
-      // user_metadata is stored alongside the user in Supabase's auth.users table.
-      // You can read it with supabase.auth.getUser() → user.user_metadata.full_name
-      data: { full_name: fullName?.trim() || '' },
-    },
-  });
-
-  // Supabase returns errors in the `error` field rather than throwing.
-  // We re-throw them so callers can use a single try/catch pattern.
-  if (error) throw error;
-
-  return data; // { user, session }
+  const { data } = await client.post('/auth/register', { email, password, fullName });
+  setToken(data.token);
+  return { user: normalizeUser(data.user) };
 }
 
-
-// ── signIn ────────────────────────────────────────────────────────────────────
-// Authenticates an existing user with email + password.
-//
-// @param email    — registered email address
-// @param password — the user's password
-//
-// Returns: { user, session }
-//   session.access_token  — the JWT for this session
-//   session.refresh_token — used to silently refresh the access token
-// Throws: if the email/password combination is wrong or the account doesn't exist.
+// Signs in an existing user and stores the session token.
 export async function signIn(email, password) {
-  const errors = validateAuthInputs(email, password);
-  if (errors) {
-    throw new Error(Object.values(errors).join(' '));
-  }
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email:    email.trim(),
-    password: password,
-  });
-
-  if (error) throw error;
-
-  return data; // { user, session }
+  const { data } = await client.post('/auth/login', { email, password });
+  setToken(data.token);
+  return { user: normalizeUser(data.user) };
 }
 
-
-// ── signOut ───────────────────────────────────────────────────────────────────
-// Ends the current session.
-// Returns: nothing (void).
-// Throws:  only on network failure (very rare).
+// Sessions are a stateless JWT held in localStorage, so "signing out" just
+// means forgetting it client-side — there's nothing to invalidate server-side.
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  clearToken();
 }
 
-
-// ── getCurrentUser ────────────────────────────────────────────────────────────
-// Returns the currently authenticated user object, or null if not logged in.
-//
-// Use this on app startup to restore the session (e.g., in App.jsx useEffect).
-//
-// Returns: user object ({ id, email, user_metadata }) or null.
+// Used on app startup to check if there's already a valid session.
+// Returns null (instead of throwing) for "no session" / "expired session" —
+// the App.jsx bootstrap just wants a yes/no answer, not an error to handle.
 export async function getCurrentUser() {
-  // getUser() verifies the token with the Supabase server (more secure than
-  // getSession() which only reads localStorage).
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error) throw error;
-  return user; // null when no one is logged in
+  if (!getToken()) return null;
+  try {
+    const { data } = await client.get('/auth/me');
+    return normalizeUser(data.user);
+  } catch {
+    clearToken(); // stale/expired token — clear it so we don't keep retrying
+    return null;
+  }
 }
 
+// Updates the display name shown in the navbar / profile panel.
+export async function updateProfileName(fullName) {
+  const { data } = await client.put('/auth/profile', { fullName });
+  return normalizeUser(data.user);
+}
 
-// ── onAuthStateChange ─────────────────────────────────────────────────────────
-// Subscribes to auth state changes (sign in, sign out, token refresh).
-//
-// @param callback — function(event, session) called whenever auth state changes
-//   event   — 'SIGNED_IN', 'SIGNED_OUT', 'TOKEN_REFRESHED', etc.
-//   session — the new session object, or null after sign-out
-//
-// Returns: an object with an `unsubscribe()` method — call it in useEffect
-//          cleanup to prevent memory leaks.
-export function onAuthStateChange(callback) {
-  // supabase.auth.onAuthStateChange returns { data: { subscription } }
-  return supabase.auth.onAuthStateChange(callback);
+// Changes the current password. The backend re-verifies currentPassword
+// itself, so there's no separate "sign in again to confirm" step needed here.
+export async function updatePassword(currentPassword, newPassword) {
+  await client.put('/auth/password', { currentPassword, newPassword });
+}
+
+// Uploads a profile photo and persists its URL onto the user's account.
+// Returns the new avatar URL.
+export async function uploadAvatar(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await client.post('/auth/avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data.url;
+}
+
+// Sends a password-reset email. The link points back to this app with a
+// ?token=... query param that Auth.jsx reads to show the "set new password" form.
+// NOTE: the backend only logs this link to its own console for now — see
+// server/src/routes/auth.routes.js for wiring up a real mail provider.
+export async function requestPasswordReset(email) {
+  await client.post('/auth/forgot-password', { email });
+}
+
+// Completes a password reset using the token from the emailed link.
+export async function resetPassword(token, password) {
+  await client.post('/auth/reset-password', { token, password });
+}
+
+// Permanently deletes the signed-in user's account (and, via the database's
+// ON DELETE CASCADE constraints, everything that belongs to them).
+export async function deleteAccount(password) {
+  await client.delete('/auth/account', { data: { password } });
+  clearToken();
 }

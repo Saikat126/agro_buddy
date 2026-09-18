@@ -1,18 +1,9 @@
-// ─── DosageCalculator.jsx — Medication Dosage Calculator ──────────────────────
-// Calculates the correct medication volume for an animal, generates a
-// treatment schedule, and saves/loads records to/from the dosage_records table.
-//
-// Responsibilities:
-//   • UI and form state (this file)
-//   • Pure math → DosageCalculatorLogic.js
-//   • Database read/write → DosageCalculatorAPI.js
-
 import React, { useState, useEffect } from 'react';
 import './DosageCalculator.css';
 import {
-  calculateDosage,   
-  doseSchedule,      
-  formatDoseDate,    
+  calculateDosage,
+  doseSchedule,
+  formatDoseDate,
 } from './DosageCalculatorLogic';
 import {
   saveDosageRecord,
@@ -21,7 +12,7 @@ import {
 } from './DosageCalculatorAPI';
 import { useConfirm } from '../shared/useConfirm';
 
-// Converts a "yyyy-mm-dd" string from the DB into "dd-mm-yyyy" for display.
+// Flips 'yyyy-mm-dd' to 'dd-mm-yyyy' for display in the history table
 function fmtDate(iso) {
   if (!iso) return '';
   return iso.split('-').reverse().join('-');
@@ -29,35 +20,30 @@ function fmtDate(iso) {
 
 export default function DosageCalculator() {
 
-  // ── Form inputs ────────────────────────────────────────────────────────────
   const { confirm, dialog } = useConfirm();
+
   const [inputs, setInputs] = useState({
-    animalName:    '',    
-    medication:    '',    
-    weightKg:      '',    
-    dosePerKg:     '',    
-    concentration: '',    
-    startDate:     '',    
-    frequencyDays: '1',   
-    durationDays:  '7',   
+    animalName:    '',
+    medication:    '',
+    weightKg:      '',
+    dosePerKg:     '',
+    concentration: '',
+    startDate:     '',
+    frequencyDays: '1',
+    durationDays:  '7',
   });
 
-  // ── Calculation results ────────────────────────────────────────────────────
-  const [result,   setResult]   = useState(null);   // { totalMg, totalMl, warning }
-  const [schedule, setSchedule] = useState([]);      // Array of Date objects
+  const [result,   setResult]   = useState(null);  // { totalMg, totalMl, warning }
+  const [schedule, setSchedule] = useState([]);     // array of Date objects for each dose
 
-  // ── Save state ─────────────────────────────────────────────────────────────
-  // saveStatus tracks the in-flight state of the save operation so the button
-  // gives feedback: 'idle' | 'saving' | 'saved' | 'error'
+  // saveStatus drives the button label and disabled state:
+  // 'idle' → 'saving' → 'saved' (or 'error' on failure)
   const [saveStatus, setSaveStatus] = useState('idle');
 
-  // ── History ────────────────────────────────────────────────────────────────
-  const [history,     setHistory]     = useState([]);   
+  const [history,     setHistory]     = useState([]);
   const [histLoading, setHistLoading] = useState(true);
   const [histError,   setHistError]   = useState(null);
 
-  // ── Load history on first render ───────────────────────────────────────────
-  // useEffect with [] runs once after the component mounts — same as componentDidMount.
   useEffect(() => {
     loadHistory();
   }, []);
@@ -66,7 +52,7 @@ export default function DosageCalculator() {
     try {
       setHistLoading(true);
       setHistError(null);
-      const records = await fetchDosageRecords(); 
+      const records = await fetchDosageRecords();
       setHistory(records);
     } catch (err) {
       setHistError('Could not load dosage history.');
@@ -76,17 +62,13 @@ export default function DosageCalculator() {
     }
   }
 
-  // ── handleChange ──────────────────────────────────────────────────────────
-  // Generic handler for all controlled form inputs.
   function handleChange(e) {
     const { name, value } = e.target;
-    // Reset save status when the user edits the form — the result is now stale.
+    // Changing any input invalidates the current result, so reset the save button
     setSaveStatus('idle');
     setInputs((prev) => ({ ...prev, [name]: value }));
   }
 
-  // ── handleCalculate ───────────────────────────────────────────────────────
-  // Converts string inputs to numbers, runs the pure math, and stores results.
   function handleCalculate(e) {
     e.preventDefault();
 
@@ -101,11 +83,11 @@ export default function DosageCalculator() {
       return;
     }
 
-    // ── Pure math (no side effects) ──────────────────────────────────────────
     const dosageResult = calculateDosage(weight, dose, concentration);
     setResult(dosageResult);
-    setSaveStatus('idle'); // reset save button for the new result
+    setSaveStatus('idle');
 
+    // Only generate a schedule if the user actually set a start date
     if (inputs.startDate) {
       const start = new Date(inputs.startDate);
       setSchedule(doseSchedule(start, frequency, duration));
@@ -114,11 +96,8 @@ export default function DosageCalculator() {
     }
   }
 
-  // ── handleSave ────────────────────────────────────────────────────────────
-  // Persists the current calculation result to the dosage_records table.
-  // Called when the user clicks "Save to History" after calculating.
   async function handleSave() {
-    // Require at least the animal name and medication name before saving.
+    // Require the key identifiers before saving — a record without a name is useless in history
     if (!inputs.animalName.trim()) {
       alert('Please enter the animal name before saving.');
       return;
@@ -136,46 +115,37 @@ export default function DosageCalculator() {
     try {
       setSaveStatus('saving');
 
-      // Build the record object that saveDosageRecord() expects.
-      // The API also calls computeEndDate() internally, so we don't need to pass end_date.
       await saveDosageRecord({
         animal_name:    inputs.animalName.trim(),
         medication:     inputs.medication.trim(),
         weight_kg:      parseFloat(inputs.weightKg),
         dose_per_kg:    parseFloat(inputs.dosePerKg),
         concentration:  parseFloat(inputs.concentration),
-        total_mg:       result.totalMg,       
-        total_ml:       result.totalMl,       
+        total_mg:       result.totalMg,
+        total_ml:       result.totalMl,
         frequency_days: parseInt(inputs.frequencyDays, 10),
         duration_days:  parseInt(inputs.durationDays, 10),
         start_date:     inputs.startDate,
       });
 
       setSaveStatus('saved');
-
-      // Refresh the history list so the new record appears immediately.
-      await loadHistory();
-
+      await loadHistory(); // refresh so the new record appears at the top
     } catch (err) {
       setSaveStatus('error');
       console.error('saveDosageRecord error:', err);
     }
   }
 
-  // ── handleDeleteRecord ────────────────────────────────────────────────────
-  // Removes a saved record from the database and the local history list.
   async function handleDeleteRecord(id) {
     if (!await confirm('Delete this dosage record?')) return;
     try {
       await deleteDosageRecord(id);
-      // Remove from local state without re-fetching.
       setHistory((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
       console.error('deleteDosageRecord error:', err);
     }
   }
 
-  // ── handleReset ──────────────────────────────────────────────────────────
   function handleReset() {
     setInputs({
       animalName: '', medication: '', weightKg: '', dosePerKg: '',
@@ -186,8 +156,7 @@ export default function DosageCalculator() {
     setSaveStatus('idle');
   }
 
-  // ── saveBtnLabel ──────────────────────────────────────────────────────────
-  // Returns the correct label for the Save button based on current saveStatus.
+  // Derives the correct Save button label from the current save state
   function saveBtnLabel() {
     if (saveStatus === 'saving') return 'Saving…';
     if (saveStatus === 'saved')  return '✓ Saved';
@@ -195,13 +164,11 @@ export default function DosageCalculator() {
     return 'Save to History';
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="dosage-calculator">
       {dialog}
       <h2 className="section-title">Dosage Calculator</h2>
 
-      {/* ── Input Form ── */}
       <form className="dc-form card" onSubmit={handleCalculate}>
 
         <div className="dc-row">
@@ -217,7 +184,6 @@ export default function DosageCalculator() {
             />
           </label>
 
-          {/* medication is new — required to save a record to the database */}
           <label className="ap-label">
             Medication Name *
             <input
@@ -324,7 +290,7 @@ export default function DosageCalculator() {
         </div>
       </form>
 
-      {/* ── Results Panel ── (only shown after a successful calculation) */}
+      {/* Results only appear after a successful calculation */}
       {result && (
         <div className="dc-result card">
           <h3 className="dc-result-title">
@@ -346,7 +312,6 @@ export default function DosageCalculator() {
             <div className="dc-warning">⚠️ {result.warning}</div>
           )}
 
-          {/* ── Schedule Table ── */}
           {schedule.length > 0 && (
             <div className="dc-schedule">
               <h4 className="dc-schedule-title">Administration Schedule</h4>
@@ -356,6 +321,7 @@ export default function DosageCalculator() {
                 </thead>
                 <tbody>
                   {schedule.map((date, index) => (
+                    // Alternating row color for readability
                     <tr key={index} className={index % 2 === 1 ? 'dc-row-alt' : ''}>
                       <td>{index + 1}</td>
                       <td>{formatDoseDate(date)}</td>
@@ -367,8 +333,7 @@ export default function DosageCalculator() {
             </div>
           )}
 
-          {/* ── Save button ──────────────────────────────────────────────────
-              Disabled while saving or after a successful save to prevent duplicates. */}
+          {/* Disabled after a successful save to prevent duplicate records */}
           <div className="dc-save-row">
             <button
               type="button"
@@ -385,10 +350,8 @@ export default function DosageCalculator() {
         </div>
       )}
 
-      {/* ── Dosage History ────────────────────────────────────────────────────
-          Each saved record is shown as its own schedule table, reconstructed
-          from the stored start_date, frequency_days, duration_days, and
-          total_ml — exactly matching the style of the live schedule above.  */}
+      {/* History — each saved record is reconstructed into a schedule table
+          using the stored start_date, frequency_days, and duration_days */}
       <div className="dc-history">
         <h3 className="dc-history-title">Saved Dosage Records</h3>
 
@@ -402,25 +365,20 @@ export default function DosageCalculator() {
         )}
 
         {history.map((rec) => {
-          // Reconstruct the dose schedule from the stored fields so we can
-          // display it in the same table format as the live schedule above.
-          const start     = new Date(rec.start_date);
-          const doses     = doseSchedule(start, rec.frequency_days, rec.duration_days);
-          const volumeMl  = Number(rec.total_ml).toFixed(2);
+          const start    = new Date(rec.start_date);
+          const doses    = doseSchedule(start, rec.frequency_days, rec.duration_days);
+          const volumeMl = Number(rec.total_ml).toFixed(2);
 
           return (
             <div key={rec.id} className="dc-history-record card">
 
-              {/* ── Record header ── */}
               <div className="dc-history-header">
                 <div className="dc-history-meta">
-                  {/* Animal name + medication as the primary identifiers */}
                   <span className="dc-history-animal">{rec.animal_name}</span>
                   <span className="dc-history-sep">·</span>
                   <span className="dc-history-med">{rec.medication}</span>
                 </div>
 
-                {/* Key numbers in small chips */}
                 <div className="dc-history-chips">
                   <span className="dc-chip">{Number(rec.total_mg).toFixed(2)} mg</span>
                   <span className="dc-chip dc-chip-green">{volumeMl} ml / dose</span>
@@ -428,7 +386,6 @@ export default function DosageCalculator() {
                   <span className="dc-chip">{fmtDate(rec.start_date)} → {fmtDate(rec.end_date)}</span>
                 </div>
 
-                {/* Delete button — top-right of the record */}
                 <button
                   className="btn-danger dc-history-delete"
                   onClick={() => handleDeleteRecord(rec.id)}
@@ -438,7 +395,6 @@ export default function DosageCalculator() {
                 </button>
               </div>
 
-              {/* ── Dose schedule table — same style as the live schedule ── */}
               <table className="dc-table">
                 <thead>
                   <tr>
@@ -449,7 +405,6 @@ export default function DosageCalculator() {
                 </thead>
                 <tbody>
                   {doses.map((date, i) => (
-                    // Even-indexed rows get the green stripe (same rule as the live table)
                     <tr key={i} className={i % 2 === 1 ? 'dc-row-alt' : ''}>
                       <td>{i + 1}</td>
                       <td>{formatDoseDate(date)}</td>

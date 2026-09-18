@@ -1,147 +1,168 @@
-// ─── Navbar.jsx — Top Navigation Bar with Auth Dropdown ──────────────────────
-// The right side of the navbar shows:
-//   • "Sign In" button (when logged out) — clicking opens a dropdown panel
-//     with Sign In / Sign Up forms
-//   • Avatar + name + Sign Out (when logged in)
-// Clicking outside the dropdown closes it (via useRef + useEffect).
-
 import React, { useState, useEffect, useRef } from 'react';
 import './Navbar.css';
-import { signIn, signUp } from '../Auth/AuthAPI';  // API calls live in AuthAPI.js
+import { requestPasswordReset, updatePassword, uploadAvatar, updateProfileName, deleteAccount } from '../Auth/AuthAPI';
+import { useConfirm } from '../shared/useConfirm';
 
 const logo = process.env.PUBLIC_URL + '/logo.png';
 
-export default function Navbar({ tabs, activeTab, onTabChange, user, onLogin, onLogout, cartCount = 0, onCartClick }) {
+export default function Navbar({ tabs, activeTab, onTabChange, user, onSignInClick, onLogout, onUserUpdate, cartCount = 0 }) {
 
-  // showPanel — whether the auth dropdown is open
-  const [showPanel, setShowPanel] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
-  // mode — which form is active inside the dropdown: 'signin' or 'signup'
-  const [mode, setMode] = useState('signin');
+  // ── Profile panel ──────────────────────────────────────────────────────────
+  const [showProfile,     setShowProfile]     = useState(false);
+  const [profileView,     setProfileView]     = useState('main'); // 'main' | 'password' | 'edit' | 'delete'
+  const [pwFields,        setPwFields]        = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileError,    setProfileError]    = useState('');
+  const [profileSuccess,  setProfileSuccess]  = useState('');
+  const [profileLoading,  setProfileLoading]  = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // fields — controlled values for all form inputs
-  const [fields, setFields] = useState({
-    name: '', email: '', password: '', confirmPassword: '',
-  });
+  const [editName,       setEditName]       = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
 
-  // error — validation or API error message shown inside the dropdown
-  const [error, setError] = useState('');
+  const profileRef    = useRef(null);
+  const avatarInputRef = useRef(null);
 
-  // loading — true while the API call is in-flight; disables the submit button
-  const [loading, setLoading] = useState(false);
+  function resetProfilePanelState() {
+    setProfileView('main');
+    setPwFields({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setEditName(user?.name || '');
+    setDeletePassword('');
+    setProfileError('');
+    setProfileSuccess('');
+  }
 
-  // panelRef — a ref attached to the dropdown container so we can detect outside clicks
-  const panelRef = useRef(null);
-
-  // ── Close panel on outside click ───────────────────────────────────────────
-  // useEffect adds a mousedown listener when the panel is open, and removes it
-  // when the panel closes or the component unmounts (the returned cleanup function).
+  // Reset profile panel when user signs out so it doesn't reappear on next login
   useEffect(() => {
-    function handleOutsideClick(e) {
-      if (panelRef.current && !panelRef.current.contains(e.target)) {
-        // Reset fields and error when dismissed by clicking outside
-        setFields({ name: '', email: '', password: '', confirmPassword: '' });
-        setError('');
-        setMode('signin');
-        setShowPanel(false);
+    if (!user) {
+      setShowProfile(false);
+      resetProfilePanelState();
+    }
+  }, [user]);
+
+  // Reset profile view to 'main' whenever the panel closes (any close method)
+  useEffect(() => {
+    if (!showProfile) {
+      resetProfilePanelState();
+    } else {
+      setEditName(user?.name || '');
+    }
+  }, [showProfile]);
+
+  // Close profile panel on outside click
+  useEffect(() => {
+    function onOutside(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setShowProfile(false);
       }
     }
-    if (showPanel) {
-      document.addEventListener('mousedown', handleOutsideClick);
+    if (showProfile) document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [showProfile]);
+
+  // ── Profile panel helpers ──────────────────────────────────────────────────
+  async function handleAvatarUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setProfileError('Please select an image file.');
+      return;
     }
-    // Cleanup: remove listener when panel closes or component unmounts
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [showPanel]); // Re-run this effect whenever showPanel changes
-
-  // ── switchMode ─────────────────────────────────────────────────────────────
-  // Switches between Sign In and Sign Up, clearing all fields and errors.
-  function switchMode(newMode) {
-    setMode(newMode);
-    setFields({ name: '', email: '', password: '', confirmPassword: '' });
-    setError('');
-  }
-
-  // ── handleChange ───────────────────────────────────────────────────────────
-  // Updates only the field that changed; clears error so old messages disappear.
-  function handleChange(e) {
-    const { name, value } = e.target;
-    setError('');
-    setFields((prev) => ({ ...prev, [name]: value }));
-  }
-
-  // ── validate ───────────────────────────────────────────────────────────────
-  // Client-side checks before hitting the API.
-  // Returns an error string, or '' if all inputs are valid.
-  function validate() {
-    if (mode === 'signup' && !fields.name.trim())
-      return 'Please enter your full name.';
-    if (!fields.email.trim())
-      return 'Please enter your email address.';
-    if (!/\S+@\S+\.\S+/.test(fields.email))
-      return 'Please enter a valid email.';
-    if (fields.password.length < 6)
-      return 'Password must be at least 6 characters.';
-    if (mode === 'signup' && fields.password !== fields.confirmPassword)
-      return 'Passwords do not match.';
-    return '';
-  }
-
-  // ── handleSubmit ───────────────────────────────────────────────────────────
-  // Runs validation, calls the correct API function, stores session, notifies App.
-  async function handleSubmit(e) {
-    e.preventDefault();
-
-    const validationError = validate();
-    if (validationError) { setError(validationError); return; }
-
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileError('Image must be smaller than 2 MB.');
+      return;
+    }
     try {
-      setLoading(true);
-      setError('');
-
-      // Call signIn() or signUp() depending on active mode.
-      // Supabase returns { user, session } — session is stored automatically
-      // in localStorage by the Supabase client; we don't need to do it manually.
-      const { user: authUser } = mode === 'signin'
-        ? await signIn(fields.email, fields.password)
-        : await signUp(fields.email, fields.password, fields.name);
-
-      // Build a plain display object for App.jsx state.
-      // Supabase stores the display name in user_metadata (set during signUp).
-      const displayUser = {
-        id:    authUser.id,
-        email: authUser.email,
-        name:  authUser.user_metadata?.full_name || authUser.email,
-      };
-
-      // Notify App.jsx → user state updates → navbar re-renders showing avatar
-      onLogin(displayUser);
-
-      // Close the dropdown and reset the form
-      setShowPanel(false);
-      setFields({ name: '', email: '', password: '', confirmPassword: '' });
-
+      setAvatarUploading(true);
+      setProfileError('');
+      const url = await uploadAvatar(file);
+      onUserUpdate?.((prev) => ({ ...prev, avatarUrl: url }));
+      setProfileSuccess('Photo updated!');
+      setTimeout(() => setProfileSuccess(''), 3000);
     } catch (err) {
-      // Supabase errors expose a .message string directly (no .response.data wrapper).
-      setError(
-        err.message ||
-        (mode === 'signin' ? 'Invalid email or password.' : 'Could not create account.')
-      );
+      setProfileError(err.message || 'Failed to upload photo.');
     } finally {
-      setLoading(false);
+      setAvatarUploading(false);
+      e.target.value = '';
     }
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  async function handlePasswordChange(e) {
+    e.preventDefault();
+    if (!pwFields.currentPassword) { setProfileError('Please enter your current password.'); return; }
+    if (pwFields.newPassword.length < 6) { setProfileError('New password must be at least 6 characters.'); return; }
+    if (pwFields.newPassword !== pwFields.confirmPassword) { setProfileError('Passwords do not match.'); return; }
+    try {
+      setProfileLoading(true);
+      setProfileError('');
+      // The backend re-verifies currentPassword itself before applying the change.
+      await updatePassword(pwFields.currentPassword, pwFields.newPassword);
+      setProfileSuccess('Password updated!');
+      setPwFields({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => { setProfileView('main'); setProfileSuccess(''); }, 2000);
+    } catch (err) {
+      setProfileError(err.message || 'Failed to update password.');
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  async function handleForgotFromProfile() {
+    try {
+      setProfileLoading(true);
+      setProfileError('');
+      await requestPasswordReset(user.email);
+      setProfileSuccess(`Reset link sent to ${user.email}`);
+    } catch (err) {
+      setProfileError(err.message || 'Could not send reset email.');
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  async function handleEditProfile(e) {
+    e.preventDefault();
+    if (!editName.trim()) { setProfileError('Please enter your name.'); return; }
+    try {
+      setProfileLoading(true);
+      setProfileError('');
+      const updated = await updateProfileName(editName);
+      onUserUpdate?.(updated);
+      setProfileSuccess('Profile updated!');
+      setTimeout(() => { setProfileView('main'); setProfileSuccess(''); }, 1500);
+    } catch (err) {
+      setProfileError(err.message || 'Failed to update profile.');
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  async function handleDeleteAccount(e) {
+    e.preventDefault();
+    if (!deletePassword) { setProfileError('Please enter your password to confirm.'); return; }
+    if (!await confirm('This permanently deletes your account and all your data (animals, listings, orders, etc.). This cannot be undone. Continue?')) return;
+    try {
+      setProfileLoading(true);
+      setProfileError('');
+      await deleteAccount(deletePassword);
+      onUserUpdate?.(null);
+    } catch (err) {
+      setProfileError(err.message || 'Failed to delete account.');
+      setProfileLoading(false);
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <nav className="navbar">
+      {dialog}
 
-      {/* ── Brand ── */}
       <div className="navbar-brand">
         <img src={logo} alt="Agro Buddy" className="navbar-logo-img" />
         <span className="navbar-title">Agro Buddy</span>
       </div>
 
-      {/* ── Feature Tabs ── */}
       <ul className="navbar-tabs">
         {tabs.map((tab) => (
           <li key={tab.id}>
@@ -155,154 +176,230 @@ export default function Navbar({ tabs, activeTab, onTabChange, user, onLogin, on
         ))}
       </ul>
 
-      {/* ── Cart icon (always visible) ── */}
-      <button
-        className="navbar-cart-btn"
-        onClick={() => onTabChange('checkout')}
-        title="View cart"
-      >
+      <button className="navbar-cart-btn" onClick={() => onTabChange('checkout')} title="View cart">
         🛒
-        {cartCount > 0 && (
-          <span className="navbar-cart-badge">{cartCount}</span>
-        )}
+        {cartCount > 0 && <span className="navbar-cart-badge">{cartCount}</span>}
       </button>
 
-      {/* ── Auth Section (right side) ── */}
-      <div className="navbar-auth-wrap" ref={panelRef}>
-
-        {user ? (
-          /* ── Logged-in state: avatar + name + sign out ── */
-          <div className="navbar-user">
-            {/* Circle avatar showing first letter of the user's name */}
-            <div className="navbar-avatar">
-              {user.name ? user.name.charAt(0).toUpperCase() : '?'}
-            </div>
-            <span className="navbar-user-name">{user.name}</span>
-            <button className="navbar-signout" onClick={onLogout}>
-              Sign Out
-            </button>
-          </div>
-        ) : (
-          /* ── Logged-out state: Sign In button ── */
+      {/* ── Logged in: avatar button + profile dropdown ── */}
+      {user ? (
+        <div className="navbar-auth-wrap" ref={profileRef}>
           <button
-            className="navbar-signin-btn"
-            onClick={() => {
-              // Always reset fields, error, and mode on every open AND close
-              // so the panel is always fresh — prevents stale values on reopen
-              setFields({ name: '', email: '', password: '', confirmPassword: '' });
-              setError('');
-              setMode('signin');
-              setShowPanel((p) => !p);
-            }}
+            className="navbar-avatar-btn"
+            onClick={() => setShowProfile((p) => !p)}
+            aria-label="Open profile"
           >
-            Sign In
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="avatar" className="navbar-avatar-img" />
+            ) : (
+              <div className="navbar-avatar">
+                {user.name ? user.name.charAt(0).toUpperCase() : '?'}
+              </div>
+            )}
           </button>
-        )}
 
-        {/* ── Auth Dropdown Panel ──
-            Only shown when no user is logged in AND the Sign In button was clicked */}
-        {showPanel && !user && (
-          <div className="nav-auth-panel">
+          {showProfile && (
+            <div className="nav-profile-panel">
 
-            {/* Panel header */}
-            <p className="nap-heading">Welcome to Agro Buddy</p>
+              {/* Avatar upload */}
+              <div className="npp-avatar-section">
+                <button
+                  className="npp-avatar-wrap"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  title="Change photo"
+                  type="button"
+                >
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="avatar" className="npp-avatar-img" />
+                  ) : (
+                    <div className="npp-avatar-letter">
+                      {user.name ? user.name.charAt(0).toUpperCase() : '?'}
+                    </div>
+                  )}
+                  <div className="npp-avatar-overlay">
+                    {avatarUploading ? (
+                      <span className="npp-spinner" />
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                    )}
+                  </div>
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleAvatarUpload}
+                />
+              </div>
 
-            {/* Sign In / Sign Up toggle tabs */}
-            <div className="nap-tabs">
-              <button
-                type="button"
-                className={`nap-tab ${mode === 'signin' ? 'active' : ''}`}
-                onClick={() => switchMode('signin')}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                className={`nap-tab ${mode === 'signup' ? 'active' : ''}`}
-                onClick={() => switchMode('signup')}
-              >
-                Sign Up
-              </button>
+              {/* Main view */}
+              {profileView === 'main' && (
+                <>
+                  <p className="npp-name">{user.name}</p>
+                  <p className="npp-email">{user.email}</p>
+
+                  {profileError   && <p className="npp-error">{profileError}</p>}
+                  {profileSuccess && <p className="npp-success">{profileSuccess}</p>}
+
+                  <div className="npp-divider" />
+
+                  <button
+                    className="npp-action-btn"
+                    onClick={() => { setProfileView('edit'); setEditName(user.name || ''); setProfileError(''); setProfileSuccess(''); }}
+                  >
+                    Edit Profile
+                  </button>
+                  <button
+                    className="npp-action-btn"
+                    onClick={() => { setProfileView('password'); setProfileError(''); setProfileSuccess(''); }}
+                  >
+                    Change Password
+                  </button>
+                  <button className="npp-action-btn npp-signout" onClick={onLogout}>
+                    Log Out
+                  </button>
+
+                  <div className="npp-divider" />
+
+                  <button
+                    className="npp-action-btn npp-danger"
+                    onClick={() => { setProfileView('delete'); setDeletePassword(''); setProfileError(''); setProfileSuccess(''); }}
+                  >
+                    Delete Account
+                  </button>
+                </>
+              )}
+
+              {/* Edit profile view */}
+              {profileView === 'edit' && (
+                <form className="npp-pw-form" onSubmit={handleEditProfile}>
+                  <div className="npp-pw-header">
+                    <button
+                      type="button"
+                      className="npp-back-btn"
+                      onClick={() => { setProfileView('main'); setProfileError(''); setProfileSuccess(''); }}
+                    >
+                      ← Back
+                    </button>
+                    <span className="npp-pw-title">Edit Profile</span>
+                  </div>
+                  <input
+                    className="input-field npp-input"
+                    type="text"
+                    placeholder="Full name"
+                    value={editName}
+                    onChange={(e) => { setProfileError(''); setEditName(e.target.value); }}
+                    autoComplete="name"
+                  />
+                  {profileError   && <p className="npp-error">{profileError}</p>}
+                  {profileSuccess && <p className="npp-success">{profileSuccess}</p>}
+                  {!profileSuccess && (
+                    <button type="submit" className="btn-primary npp-submit" disabled={profileLoading}>
+                      {profileLoading ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  )}
+                </form>
+              )}
+
+              {/* Delete account view */}
+              {profileView === 'delete' && (
+                <form className="npp-pw-form" onSubmit={handleDeleteAccount}>
+                  <div className="npp-pw-header">
+                    <button
+                      type="button"
+                      className="npp-back-btn"
+                      onClick={() => { setProfileView('main'); setDeletePassword(''); setProfileError(''); setProfileSuccess(''); }}
+                    >
+                      ← Back
+                    </button>
+                    <span className="npp-pw-title">Delete Account</span>
+                  </div>
+                  <p className="npp-danger-warning">
+                    This permanently deletes your account and all of your data — animal profiles, listings, orders, everything. This cannot be undone.
+                  </p>
+                  <input
+                    className="input-field npp-input"
+                    type="password"
+                    placeholder="Enter your password to confirm"
+                    value={deletePassword}
+                    onChange={(e) => { setProfileError(''); setDeletePassword(e.target.value); }}
+                    autoComplete="current-password"
+                  />
+                  {profileError && <p className="npp-error">{profileError}</p>}
+                  <button type="submit" className="btn-danger npp-submit" disabled={profileLoading}>
+                    {profileLoading ? 'Deleting…' : 'Permanently Delete Account'}
+                  </button>
+                </form>
+              )}
+
+              {/* Change password view */}
+              {profileView === 'password' && (
+                <form className="npp-pw-form" onSubmit={handlePasswordChange}>
+                  <div className="npp-pw-header">
+                    <button
+                      type="button"
+                      className="npp-back-btn"
+                      onClick={() => { setProfileView('main'); setProfileError(''); setProfileSuccess(''); setPwFields({ currentPassword: '', newPassword: '', confirmPassword: '' }); }}
+                    >
+                      ← Back
+                    </button>
+                    <span className="npp-pw-title">Change Password</span>
+                  </div>
+                  <input
+                    className="input-field npp-input"
+                    type="password"
+                    placeholder="Current password"
+                    value={pwFields.currentPassword}
+                    onChange={(e) => { setProfileError(''); setPwFields((p) => ({ ...p, currentPassword: e.target.value })); }}
+                    autoComplete="current-password"
+                  />
+                  <input
+                    className="input-field npp-input"
+                    type="password"
+                    placeholder="New password"
+                    value={pwFields.newPassword}
+                    onChange={(e) => { setProfileError(''); setPwFields((p) => ({ ...p, newPassword: e.target.value })); }}
+                    autoComplete="new-password"
+                  />
+                  <input
+                    className="input-field npp-input"
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={pwFields.confirmPassword}
+                    onChange={(e) => { setProfileError(''); setPwFields((p) => ({ ...p, confirmPassword: e.target.value })); }}
+                    autoComplete="new-password"
+                  />
+                  {profileError   && <p className="npp-error">{profileError}</p>}
+                  {profileSuccess && <p className="npp-success">{profileSuccess}</p>}
+                  {!profileSuccess && (
+                    <>
+                      <button type="submit" className="btn-primary npp-submit" disabled={profileLoading}>
+                        {profileLoading ? 'Updating…' : 'Update Password'}
+                      </button>
+                      <button type="button" className="npp-forgot-pw-link" onClick={handleForgotFromProfile} disabled={profileLoading}>
+                        Forgot your password?
+                      </button>
+                    </>
+                  )}
+                </form>
+              )}
+
             </div>
-
-            {/* Form — onSubmit calls handleSubmit above */}
-            <form className="nap-form" onSubmit={handleSubmit}>
-
-              {/* Name — Sign Up only */}
-              {mode === 'signup' && (
-                <input
-                  className="input-field nap-input"
-                  type="text"
-                  name="name"
-                  value={fields.name}
-                  onChange={handleChange}
-                  placeholder="Full Name"
-                  autoComplete="name"
-                />
-              )}
-
-              <input
-                className="input-field nap-input"
-                type="email"
-                name="email"
-                value={fields.email}
-                onChange={handleChange}
-                placeholder="Email Address"
-                autoComplete="email"
-              />
-
-              <input
-                className="input-field nap-input"
-                type="password"
-                name="password"
-                value={fields.password}
-                onChange={handleChange}
-                placeholder="Password"
-                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              />
-
-              {/* Confirm Password — Sign Up only */}
-              {mode === 'signup' && (
-                <input
-                  className="input-field nap-input"
-                  type="password"
-                  name="confirmPassword"
-                  value={fields.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Confirm Password"
-                  autoComplete="new-password"
-                />
-              )}
-
-              {/* Error message */}
-              {error && <p className="nap-error">{error}</p>}
-
-              {/* Submit */}
-              <button
-                type="submit"
-                className="btn-primary nap-submit"
-                disabled={loading}
-              >
-                {loading
-                  ? '...'
-                  : mode === 'signin' ? 'Sign In' : 'Create Account'}
-              </button>
-            </form>
-
-            {/* Switch mode link */}
-            <p className="nap-switch">
-              {mode === 'signin' ? "No account? " : 'Have an account? '}
-              <button
-                type="button"
-                className="nap-switch-btn"
-                onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
-              >
-                {mode === 'signin' ? 'Sign Up' : 'Sign In'}
-              </button>
-            </p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : (
+        /* ── Logged out: Sign In button — opens the full-page Auth screen ── */
+        <div className="navbar-auth-wrap">
+          <button className="navbar-signin-btn" onClick={onSignInClick}>
+            Login
+          </button>
+        </div>
+      )}
     </nav>
   );
 }

@@ -1,9 +1,8 @@
-// ─── Checkout.jsx — Billing, Shipping & Order Summary ────────────────────────
 import React, { useState, useEffect } from 'react';
 import './Checkout.css';
 import { placeOrder, fetchBuyerOrders } from './OrdersAPI';
 
-const SHIPPING_FEE = 65;
+const SHIPPING_FEE   = 65;
 const SHIPPING_LABEL = 'Standard Delivery';
 
 export default function Checkout({ cart, user, removeFromCart, updateQty, clearCart, onGoToMarket }) {
@@ -12,15 +11,13 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
     fullName: '', address: '', district: '', phone: '', email: '', note: '',
   });
 
-  const [placed,    setPlaced]    = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [error,     setError]     = useState('');
-
-  // ── Order history (shown when cart is empty) ───────────────────────────────
+  const [placed,        setPlaced]        = useState(false);
+  const [saving,        setSaving]        = useState(false);
+  const [error,         setError]         = useState('');
   const [orders,        setOrders]        = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Load order history whenever the cart is empty and a user is signed in
+  // Show order history when the cart is empty — only makes sense if someone is signed in
   useEffect(() => {
     if (cart.length > 0 || !user || placed) return;
     setOrdersLoading(true);
@@ -30,12 +27,12 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
       .finally(() => setOrdersLoading(false));
   }, [cart.length, user, placed]);
 
-  // Clear the cart only AFTER placed=true has rendered
+  // Clear the cart *after* the success screen has rendered, not before.
+  // If we cleared it first the component would jump straight to the empty-cart view.
   useEffect(() => {
     if (placed) clearCart();
   }, [placed]);
 
-  // ── Derived values ─────────────────────────────────────────────────────────
   const subtotal    = cart.reduce((s, item) => s + Number(item.price) * item.quantity, 0);
   const shippingFee = SHIPPING_FEE;
 
@@ -48,6 +45,7 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
     if (!form.fullName.trim())  return 'Full name is required.';
     if (!form.address.trim())   return 'Address is required.';
     if (!form.district.trim())  return 'District is required.';
+    // Strip non-digits then check length — handles spaces, dashes, country codes
     if (form.phone.replace(/\D/g, '').length < 10) return 'Please enter a valid phone number.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return 'Please enter a valid email address.';
     return '';
@@ -70,7 +68,7 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
     }
   }
 
-  // ── Order placed success screen ────────────────────────────────────────────
+  // Order confirmed — show a thank-you screen instead of the form
   if (placed) {
     return (
       <div className="checkout-empty">
@@ -86,7 +84,7 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
     );
   }
 
-  // ── Empty cart state — show order history ──────────────────────────────────
+  // Cart is empty — show past orders instead of a blank page
   if (cart.length === 0) {
     return (
       <div className="checkout">
@@ -101,7 +99,6 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
           </button>
         </div>
 
-        {/* ── Past orders ── */}
         {ordersLoading && <p className="ap-loading">Loading your orders…</p>}
 
         {!ordersLoading && orders.length > 0 && (
@@ -109,12 +106,10 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
             {orders.map((order) => (
               <div key={order.id} className="co-order-card card">
 
-                {/* Status badge */}
                 <span className={`mp-order-status mp-status-${order.status} co-card-status`}>
                   {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                 </span>
 
-                {/* Order ID + date */}
                 <h3 className="co-card-id">Order #{order.id.slice(0, 8).toUpperCase()}</h3>
                 <p className="co-card-date">
                   {new Date(order.created_at).toLocaleDateString('en-GB', {
@@ -122,7 +117,6 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
                   })}
                 </p>
 
-                {/* Items list */}
                 <ul className="co-card-items">
                   {order.order_items.map((item) => (
                     <li key={item.id}>
@@ -132,7 +126,6 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
                   ))}
                 </ul>
 
-                {/* Totals */}
                 <div className="co-card-footer">
                   <span className="co-card-ship">{SHIPPING_LABEL} (${order.shipping_fee})</span>
                   <span className="co-card-total">${Number(order.subtotal).toFixed(2)} + ${order.shipping_fee}</span>
@@ -146,14 +139,13 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
     );
   }
 
-  // ── Main checkout layout ───────────────────────────────────────────────────
+  // Main checkout layout — billing form on the left, order summary on the right
   return (
     <div className="checkout">
       <h2 className="section-title">Checkout</h2>
 
       <div className="checkout-layout">
 
-        {/* ── LEFT: Billing & Shipping form ── */}
         <div className="checkout-form-col">
           <div className="card checkout-card">
             <h3 className="checkout-section-heading">Billing &amp; Shipping</h3>
@@ -201,6 +193,7 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
 
               {error && <p className="ap-error">{error}</p>}
 
+              {/* Disabled while the request is in-flight to prevent double orders */}
               <button type="submit" className="btn-primary co-place-btn" disabled={saving}>
                 {saving ? 'Placing Order…' : 'Place Order'}
               </button>
@@ -209,7 +202,6 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
           </div>
         </div>
 
-        {/* ── RIGHT: Order summary ── */}
         <div className="checkout-summary-col">
           <div className="card checkout-card">
             <h3 className="checkout-section-heading">Order Summary</h3>
@@ -227,6 +219,7 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
                     </td>
                     <td>
                       <div className="co-qty-wrap">
+                        {/* Decrementing to 0 removes the item entirely (handled by updateQty in App.jsx) */}
                         <button className="co-qty-btn" onClick={() => updateQty(item.id, item.quantity - 1)}>−</button>
                         <span className="co-qty-val">{item.quantity}</span>
                         <button className="co-qty-btn" onClick={() => updateQty(item.id, item.quantity + 1)}>+</button>
@@ -242,16 +235,12 @@ export default function Checkout({ cart, user, removeFromCart, updateQty, clearC
             </table>
 
             <div className="co-divider" />
-
             <div className="co-row"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-
             <div className="co-row">
               <span>{SHIPPING_LABEL}</span>
               <span>${SHIPPING_FEE}</span>
             </div>
-
             <div className="co-divider" />
-
             <div className="co-total-row">
               <span>Total</span>
               <span className="co-total-amount">${subtotal.toFixed(2)} + ${shippingFee}</span>

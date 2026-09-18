@@ -6,18 +6,50 @@
   display: flex;
   align-items: center;        /* Vertically centre the card */
   justify-content: center;    /* Horizontally centre the card */
-  background: linear-gradient(135deg, #0f2417 0%, #1a3d2b 50%, #0d3320 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   padding: 24px 16px;         /* Side padding so card doesn't touch screen edges on mobile */
 }
 
-/* The white card that holds the entire auth UI */
+/* The card that holds the entire auth UI — semi-transparent with a blur so the
+   background photo shows through while the form stays readable */
 .auth-card {
-  background: #ffffff;
+  position: relative;         /* Anchors the close button */
+  background: rgba(255, 255, 255, 0.58);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 20px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), 0 8px 20px rgba(0, 0, 0, 0.2);
   padding: 40px 44px;
   width: 100%;
   max-width: 420px;           /* Never wider than 420px even on large screens */
+}
+
+/* Dismiss button — only rendered when the page can be closed without signing in */
+.auth-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.auth-close-btn:hover {
+  background: var(--color-primary-lt);
+  color: var(--color-primary-dk);
 }
 
 /* ── Brand section (logo + name + tagline) ── */
@@ -34,7 +66,7 @@
   height: 90px;
   width: 90px;
   object-fit: contain;
-  border-radius: 50%;          /* Circular frame */
+  border-radius: 14px;         /* Square frame with softened corners */
   border: 3px solid var(--color-primary-lt);
   margin-bottom: 12px;
   box-shadow: 0 4px 16px rgba(22, 163, 74, 0.2);
@@ -46,11 +78,14 @@
   color: var(--color-text);
   letter-spacing: -0.5px;
   margin-bottom: 4px;
+  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.5);
 }
 
 .auth-tagline {
   font-size: 0.88rem;
-  color: var(--color-text-muted);
+  font-weight: 600;
+  color: #374151;
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.6);
 }
 
 /* ── Sign In / Sign Up toggle tabs ── */
@@ -97,10 +132,11 @@
   flex-direction: column;
   gap: 6px;
   font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
+  font-weight: 700;
+  color: #374151;
   text-transform: uppercase;
   letter-spacing: 0.4px;
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.6);
 }
 
 /* Error message box */
@@ -133,12 +169,67 @@
   transform: none;              /* Override the hover lift so it stays flat */
 }
 
+/* Forgot password link */
+.auth-forgot-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: right;
+  align-self: flex-end;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-forgot-link:hover {
+  color: var(--color-primary-dk);
+}
+
+/* Forgot / Reset mode heading */
+.auth-mode-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.auth-mode-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.auth-mode-sub {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  line-height: 1.5;
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.6);
+}
+
+/* Success message box */
+.auth-success {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  color: #15803d;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 10px 14px;
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* ── Bottom "switch mode" line ── */
 .auth-switch {
   text-align: center;
   font-size: 0.88rem;
-  color: var(--color-text-muted);
+  font-weight: 600;
+  color: #374151;
   margin-top: 20px;
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.6);
 }
 
 /* Inline link-style button to switch between Sign In and Sign Up */

@@ -1,30 +1,18 @@
-// ─── VetFinder.jsx — Feature: Vet Finder ─────────────────────────────────────
-// Shows NO vets by default. Results appear only when the user types a search.
-// This prevents the full directory from being exposed on page load.
-//
-// Auth rules:
-//   • Anyone can search and view vet results (public read).
-//   • Only signed-in users can add a new vet record.
-//   • Only the user who added a vet can remove it.
-
 import React, { useState, useEffect } from 'react';
 import './VetFinder.css';
 import { searchVets, createVet, deleteVet } from './VetFinderAPI';
 import { useConfirm } from '../shared/useConfirm';
 
-// user — passed from App.jsx. null when nobody is signed in.
 export default function VetFinder({ user }) {
 
-  // results — vets returned by the last search call. Empty until user searches.
   const { confirm, dialog } = useConfirm();
-  const [results,  setResults]  = useState([]);
 
-  // searchQuery — controlled value of the search input
+  // No results shown until the user searches — keeps the directory private on first load
+  const [results,     setResults]     = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState(null);
+  const [showForm,    setShowForm]    = useState(false);
 
   const [formData, setFormData] = useState({
     name:     '',
@@ -35,41 +23,35 @@ export default function VetFinder({ user }) {
     map_link: '',
   });
 
-  // ── Search whenever the query changes ────────────────────────────────────────
-  // A 400 ms debounce prevents an API call on every single keystroke.
-  // When the query is cleared, results are cleared immediately — no API call.
+  // Debounced search — fires 400 ms after the user stops typing.
+  // Without the debounce we'd hit the database on every single keystroke.
   useEffect(() => {
-    // Clear results and do nothing when the box is empty
     if (!searchQuery.trim()) {
       setResults([]);
       setError(null);
       return;
     }
 
-    // Debounce: set a timer that fires 400 ms after the user stops typing
     const timer = setTimeout(async () => {
       try {
         setLoading(true);
         setError(null);
         const data = await searchVets(searchQuery.trim());
 
-        // Sort so that area/location matches come first, name matches after.
-        // This makes "Dhaka" return Dhaka-area vets before vets named "Dhaka...".
+        // Sort so location matches come first, then name matches.
+        // "Dhaka" should show Dhaka-area vets at the top, not vets named "Dhaka Clinic".
         const q = searchQuery.trim().toLowerCase();
         data.sort((a, b) => {
           const aLoc = (a.location || '').toLowerCase();
           const bLoc = (b.location || '').toLowerCase();
-          // Exact location match scores highest
-          const aExact = aLoc === q;
-          const bExact = bLoc === q;
+          const aExact   = aLoc === q;
+          const bExact   = bLoc === q;
           if (aExact && !bExact) return -1;
           if (!aExact && bExact) return 1;
-          // Partial location match scores next
           const aPartial = aLoc.includes(q);
           const bPartial = bLoc.includes(q);
           if (aPartial && !bPartial) return -1;
           if (!aPartial && bPartial) return 1;
-          // Fall back to alphabetical by name
           return (a.name || '').localeCompare(b.name || '');
         });
 
@@ -82,17 +64,15 @@ export default function VetFinder({ user }) {
       }
     }, 400);
 
-    // Cleanup: cancel the pending timer if the user keeps typing
+    // If the user keeps typing, cancel the pending timer and start a fresh one
     return () => clearTimeout(timer);
-  }, [searchQuery]); // Re-run every time the query string changes
+  }, [searchQuery]);
 
-  // ── handleInputChange ─────────────────────────────────────────────────────────
   function handleInputChange(e) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
 
-  // ── handleAddVet ──────────────────────────────────────────────────────────────
   async function handleAddVet(e) {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
@@ -101,17 +81,17 @@ export default function VetFinder({ user }) {
     }
     try {
       const newVet = await createVet(formData);
-      // Add to results so the new vet is visible without re-searching
+      // Prepend to results so the new vet is immediately visible without re-searching
       setResults((prev) => [newVet, ...prev]);
       setFormData({ name: '', clinic: '', phone: '', email: '', location: '', map_link: '' });
       setShowForm(false);
     } catch (err) {
-      setError('Failed to add vet. Please try again.');
+      const detail = err?.message || String(err);
+      setError(`Failed to add vet: ${detail}`);
       console.error(err);
     }
   }
 
-  // ── handleDelete ──────────────────────────────────────────────────────────────
   async function handleDelete(id) {
     if (!await confirm('Remove this vet from the directory?')) return;
     try {
@@ -122,12 +102,10 @@ export default function VetFinder({ user }) {
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="vet-finder">
       {dialog}
 
-      {/* Header: title + Add Vet button (signed-in only) */}
       <div className="vf-header">
         <h2 className="section-title">Vet Finder</h2>
         {user ? (
@@ -138,11 +116,10 @@ export default function VetFinder({ user }) {
             {showForm ? 'Cancel' : '+ Add Vet'}
           </button>
         ) : (
-          <span className="mp-signin-hint">Sign in to add a vet</span>
+          <span className="mp-signin-hint">Login to add a vet</span>
         )}
       </div>
 
-      {/* Add Vet Form — signed-in users only */}
       {showForm && user && (
         <form className="vf-form card" onSubmit={handleAddVet}>
           <h3 className="vf-form-title">Register a New Vet</h3>
@@ -195,7 +172,7 @@ export default function VetFinder({ user }) {
         </form>
       )}
 
-      {/* Search bar — available to everyone */}
+      {/* Search is available to everyone, even guests */}
       <input
         className="input-field vf-search"
         type="text"
@@ -204,21 +181,17 @@ export default function VetFinder({ user }) {
         onChange={(e) => setSearchQuery(e.target.value)}
       />
 
-      {/* Status messages */}
       {loading && <p className="ap-loading">Searching…</p>}
       {error   && <p className="ap-error">{error}</p>}
 
-      {/* Prompt shown before the user has typed anything */}
       {!loading && !error && !searchQuery.trim() && (
         <p className="ap-empty">Type a name or area above to find vets.</p>
       )}
 
-      {/* No results after a search */}
       {!loading && !error && searchQuery.trim() && results.length === 0 && (
         <p className="ap-empty">No vets found for "{searchQuery}". Try a different name or area.</p>
       )}
 
-      {/* Vet Cards */}
       <div className="vf-grid">
         {results.map((vet) => (
           <div key={vet.id} className="vf-card card">
@@ -247,7 +220,7 @@ export default function VetFinder({ user }) {
               )}
             </ul>
 
-            {/* Remove button — only shown to the user who added this vet */}
+            {/* Remove button only shown to the user who originally added this vet */}
             {user && user.id === vet.user_id && (
               <div className="vf-actions">
                 <button className="btn-danger" onClick={() => handleDelete(vet.id)}>

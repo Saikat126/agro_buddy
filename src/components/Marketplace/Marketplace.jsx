@@ -1,46 +1,46 @@
-// ─── Marketplace.jsx — Feature: Farm Marketplace ─────────────────────────────
-// Displays product listings. Users can search by listing title,
-// post new listings, and remove existing ones.
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './Marketplace.css';
-import { fetchListings, createListing, deleteListing, VALID_CATEGORIES } from './MarketplaceAPI';
+import { fetchListings, createListing, deleteListing, uploadListingImage, VALID_CATEGORIES } from './MarketplaceAPI';
 import { fetchSellerOrders, updateOrderStatus, deleteOrder } from '../Checkout/OrdersAPI';
 import { useConfirm } from '../shared/useConfirm';
 
-// user, addToCart, onGoToCheckout — passed from App.jsx.
 export default function Marketplace({ user, addToCart, onGoToCheckout }) {
 
-  // 'browse' | 'orders' — which view is active for signed-in sellers
   const { confirm, dialog } = useConfirm();
-  const [view, setView] = useState('browse');
 
-  // listings — full array fetched from the server
+  // 'browse' shows listings; 'orders' shows incoming orders for sellers
+  const [view,     setView]     = useState('browse');
   const [listings, setListings] = useState([]);
 
-  // searchQuery — text the user types in the search box
+  // Search is the only way to discover other people's listings —
+  // no search = no results, so the page isn't a firehose on first load
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
   const [showForm, setShowForm] = useState(false);
 
-  // formData mirrors every field in the "Post Listing" form
   const [formData, setFormData] = useState({
     title:       '',
-    category:    'Livestock',  
+    category:    'Livestock',
     price:       '',
-    unit:        '',          
-    seller_name: '',           
+    unit:        '',
+    seller_name: '',
     description: '',
   });
 
-  // Seller orders state
-  const [sellerOrders,     setSellerOrders]     = useState([]);
-  const [ordersLoading,    setOrdersLoading]    = useState(false);
-  const [ordersError,      setOrdersError]      = useState(null);
+  // Product photo for the listing being created — held as a local file/preview
+  // until submit, when it's uploaded and its URL is attached to the listing.
+  const [imageFile,      setImageFile]      = useState(null);
+  const [imagePreview,   setImagePreview]   = useState(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageInputRef = useRef(null);
 
-  // Load seller orders when the orders view is activated
+  const [sellerOrders,  setSellerOrders]  = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError,   setOrdersError]   = useState(null);
+
+  // Only fetch seller orders when the orders tab is actually open
   useEffect(() => {
     if (view !== 'orders' || !user) return;
     setOrdersLoading(true);
@@ -51,11 +51,11 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
       .finally(() => setOrdersLoading(false));
   }, [view, user]);
 
-  // ── handleOrderStatusChange ───────────────────────────────────────────────────
   async function handleOrderStatusChange(orderId, newStatus) {
     try {
       if (newStatus === 'cancelled' || newStatus === 'delivered') {
-        // Delete the order entirely — cascade removes its order_items too
+        // We delete the order entirely when it's cancelled or delivered —
+        // cascade removes the order_items rows too
         await deleteOrder(orderId);
         setSellerOrders((prev) => prev.filter((entry) => entry.order.id !== orderId));
       } else {
@@ -74,7 +74,6 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     }
   }
 
-  // ── Fetch listings once on mount ─────────────────────────────────────────────
   useEffect(() => {
     loadListings();
   }, []);
@@ -93,16 +92,13 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     }
   }
 
-  // ── myListings ────────────────────────────────────────────────────────────────
-  // The signed-in user's own listings — shown by default when no search is active.
+  // The signed-in user's own listings — shown by default when there's no active search
   const myListings = useMemo(() => {
     if (!user) return [];
     return listings.filter((item) => item.user_id === user.id);
   }, [listings, user]);
 
-  // ── searchResults ─────────────────────────────────────────────────────────────
-  // All listings whose title matches the search query (every user's listings).
-  // Only populated when the search box is non-empty.
+  // Search results — only populated when the user has typed something
   const searchResults = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return [];
@@ -111,20 +107,38 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     );
   }, [listings, searchQuery]);
 
-  // Convenience flag — true when the user has typed something in the search box
   const isSearching = searchQuery.trim().length > 0;
 
-  // ── handleInputChange ─────────────────────────────────────────────────────────
-  // Single handler for all form inputs — updates only the field that changed.
   function handleInputChange(e) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
 
-  // ── handleAddListing ──────────────────────────────────────────────────────────
-  // Validates, posts to API, prepends result to state, resets form.
+  function resetForm() {
+    setFormData({ title: '', category: 'Livestock', price: '', unit: '', seller_name: '', description: '' });
+    setImageFile(null);
+    setImagePreview(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  function handleImageChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be smaller than 5 MB.');
+      return;
+    }
+    setError(null);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }
+
   async function handleAddListing(e) {
-    e.preventDefault(); 
+    e.preventDefault();
 
     if (!formData.title.trim() || !formData.price || !formData.seller_name.trim()) {
       alert('Title, price, and seller name are required.');
@@ -132,18 +146,24 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     }
 
     try {
-      const newListing = await createListing(formData);
-      setListings((prev) => [newListing, ...prev]); 
-      setFormData({ title: '', category: 'Livestock', price: '', unit: '', seller_name: '', description: '' });
+      let image_url = null;
+      if (imageFile) {
+        setImageUploading(true);
+        image_url = await uploadListingImage(imageFile);
+      }
+      const newListing = await createListing({ ...formData, image_url });
+      // Prepend so the new listing appears at the top without a full re-fetch
+      setListings((prev) => [newListing, ...prev]);
+      resetForm();
       setShowForm(false);
     } catch (err) {
       setError('Failed to post listing.');
       console.error(err);
+    } finally {
+      setImageUploading(false);
     }
   }
 
-  // ── handleDelete ──────────────────────────────────────────────────────────────
-  // Confirms, deletes from server, removes from local state.
   async function handleDelete(id) {
     if (!await confirm('Remove this listing?')) return;
     try {
@@ -154,12 +174,10 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="marketplace">
       {dialog}
 
-      {/* Header: title + view toggle (for signed-in users) + post button */}
       <div className="mp-header">
         <div className="mp-header-left">
           <h2 className="section-title" style={{ marginBottom: 0 }}>Farm Marketplace</h2>
@@ -182,17 +200,17 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
         </div>
         {user ? (
           <button className="btn-primary" onClick={() => {
-            if (showForm) setFormData({ title: '', category: 'Livestock', price: '', unit: '', seller_name: '', description: '' });
+            if (showForm) resetForm();
             setShowForm((p) => !p);
           }}>
             {showForm ? 'Cancel' : '+ Post Listing'}
           </button>
         ) : (
-          <span className="mp-signin-hint">Sign in to post a listing</span>
+          <span className="mp-signin-hint">Login to post a listing</span>
         )}
       </div>
 
-      {/* ── Seller: Incoming Orders view ── */}
+      {/* Seller orders panel — only rendered when that tab is selected */}
       {view === 'orders' && user && (
         <SellerOrdersPanel
           orders={sellerOrders}
@@ -202,14 +220,30 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
         />
       )}
 
-      {/* ── Browse view (default) ── */}
       {view === 'browse' && (
       <>
 
-      {/* ── Post Listing Form — only reachable when signed in ── */}
       {showForm && user && (
         <form className="mp-form card" onSubmit={handleAddListing}>
           <h3 className="mp-form-title">New Listing</h3>
+
+          <label className="ap-label">
+            Product Photo
+            <div className="mp-image-upload" onClick={() => imageInputRef.current?.click()}>
+              {imagePreview ? (
+                <img src={imagePreview} alt="Listing preview" className="mp-image-preview" />
+              ) : (
+                <span className="mp-image-upload-hint">📷 Click to add a photo</span>
+              )}
+            </div>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              style={{ display: 'none' }}
+            />
+          </label>
 
           <label className="ap-label">
             Title *
@@ -288,11 +322,12 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
             />
           </label>
 
-          <button type="submit" className="btn-primary">Post Listing</button>
+          <button type="submit" className="btn-primary" disabled={imageUploading}>
+            {imageUploading ? 'Uploading photo…' : 'Post Listing'}
+          </button>
         </form>
       )}
 
-      {/* ── Search by name only ── */}
       <input
         className="input-field mp-search"
         type="text"
@@ -301,17 +336,14 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
         onChange={(e) => setSearchQuery(e.target.value)}
       />
 
-      {/* Status / loading */}
       {loading && <p className="ap-loading">Loading listings...</p>}
       {error   && <p className="ap-error">{error}</p>}
 
       {!loading && !error && (
         <>
-          {/* ── No search active ── */}
           {!isSearching && (
             <>
               {user ? (
-                // Signed in, no search → show only this user's listings
                 <>
                   <p className="mp-section-label">Your Listings</p>
                   {myListings.length === 0 ? (
@@ -326,13 +358,11 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
                   </p>
                 </>
               ) : (
-                // Signed out, no search → prompt to search
                 <p className="ap-empty">Search by listing name to browse the marketplace.</p>
               )}
             </>
           )}
 
-          {/* ── Search active → show all matching listings ── */}
           {isSearching && (
             <>
               {searchResults.length === 0 ? (
@@ -350,7 +380,6 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
         </>
       )}
 
-      {/* close the browse <> fragment */}
       </>
       )}
 
@@ -358,9 +387,8 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
   );
 }
 
-// ── SellerOrdersPanel ─────────────────────────────────────────────────────────
-// Shows all incoming orders that contain at least one of the seller's listings.
-// Only rendered when view === 'orders' and user is signed in.
+// Shows incoming orders for a seller. Each card displays full customer info
+// plus action buttons to confirm, cancel, or mark as delivered.
 function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
   const SHIP_LABELS = { inside: 'Inside Dhaka', suburbs: 'Dhaka Suburbs', outside: 'Outside Dhaka', standard: 'Standard Delivery' };
 
@@ -373,13 +401,12 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
   return (
     <div className="mp-orders-list">
       {orders.map(({ order, items }) => {
-        if (!order) return null; // safety guard if RLS blocks the join
+        if (!order) return null; // RLS blocked the join — skip the row
         const isPending   = order.status === 'pending';
         const isConfirmed = order.status === 'confirmed';
         return (
         <div key={order.id} className="mp-order-card card">
 
-          {/* ── Order header ── */}
           <div className="mp-order-header">
             <div>
               <span className="mp-order-id">Order #{order.id.slice(0, 8).toUpperCase()}</span>
@@ -393,7 +420,6 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
               <span className={`mp-order-status mp-status-${order.status}`}>
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </span>
-              {/* Action buttons — only for pending or confirmed orders */}
               {isPending && (
                 <div className="mp-order-actions">
                   <button
@@ -424,8 +450,6 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
           </div>
 
           <div className="mp-order-body">
-
-            {/* ── Customer details (seller-only view) ── */}
             <div className="mp-customer-details">
               <p className="mp-order-section-label">Customer Details</p>
               <table className="mp-customer-table">
@@ -441,7 +465,6 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
               </table>
             </div>
 
-            {/* ── Items from this seller ── */}
             <div className="mp-ordered-items">
               <p className="mp-order-section-label">Your Items in This Order</p>
               <table className="mp-items-table">
@@ -465,18 +488,23 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
             </div>
           </div>
         </div>
-        ); // close return(
+        );
       })}
     </div>
   );
 }
 
-// ── ListingsGrid ──────────────────────────────────────────────────────────────
+// Renders a grid of listing cards. "Add to Cart" is hidden for the owner's own listings.
 function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
   return (
     <div className="mp-grid">
       {items.map((item) => (
         <div key={item.id} className="mp-card card">
+          {item.image_url ? (
+            <img src={item.image_url} alt={item.title} className="mp-card-image" />
+          ) : (
+            <div className="mp-card-image mp-card-image-placeholder">🌾</div>
+          )}
           <h3 className="mp-card-title">{item.title}</h3>
           <span className="mp-category-badge">{item.category}</span>
           <div className="mp-price">
@@ -488,7 +516,7 @@ function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
             <span className="mp-seller">🧑‍🌾 {item.seller_name}</span>
           </div>
           <div className="mp-card-actions">
-            {/* Add to Cart — only for signed-in users who do NOT own this listing */}
+            {/* Only show "Add to Cart" for other people's listings, not your own */}
             {user && user.id !== item.user_id && (
               <button
                 className="btn-primary mp-cart-btn"
@@ -500,11 +528,9 @@ function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
                 🛒 Add to Cart
               </button>
             )}
-            {/* Owner badge shown instead of the cart button */}
             {user && user.id === item.user_id && (
               <span className="mp-own-badge">Your Listing</span>
             )}
-            {/* Remove — only the listing owner */}
             {user && user.id === item.user_id && (
               <button className="btn-danger" onClick={() => onDelete(item.id)}>
                 Remove

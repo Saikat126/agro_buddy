@@ -219,4 +219,9 @@ body {
   color: var(--color-text-muted);
   font-size: 0.95rem;
   line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.app-signin-btn {
+  padding: 10px 28px;
 }

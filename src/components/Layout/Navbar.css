@@ -138,22 +138,31 @@
   box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
 }
 
-/* ── Logged-in: user section ── */
-.navbar-user {
+/* ── Logged-in: avatar button ── */
+.navbar-avatar-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  border-radius: 50%;
+  transition: opacity 0.2s ease;
 }
 
-/* Circle avatar with first letter of user's name */
+.navbar-avatar-btn:hover {
+  opacity: 0.82;
+}
+
+/* Circle avatar with first letter */
 .navbar-avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: rgba(52, 211, 153, 0.2);
-  border: 1px solid rgba(52, 211, 153, 0.4);
+  border: 2px solid rgba(52, 211, 153, 0.5);
   color: #34d399;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -161,167 +170,295 @@
   flex-shrink: 0;
 }
 
-.navbar-user-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
-  white-space: nowrap;
+/* Photo avatar in navbar */
+.navbar-avatar-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(52, 211, 153, 0.5);
+  display: block;
 }
 
-.navbar-signout {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.55);
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
-  white-space: nowrap;
-}
-
-.navbar-signout:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
-}
-
-/* ── Auth Dropdown Panel ── */
-.nav-auth-panel {
+/* ── Profile dropdown panel ── */
+.nav-profile-panel {
   position: absolute;
-  top: calc(100% + 12px);   /* 12px gap below the navbar button */
-  right: 0;                 /* Aligns right edge with the Sign In button */
-  width: 320px;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 270px;
   background: #ffffff;
   border-radius: 16px;
   border: 1px solid var(--color-border);
   box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 6px 16px rgba(0,0,0,0.1);
-  padding: 24px 24px 20px;
-  z-index: 300;             /* Above everything else on the page */
-  /* Subtle slide-down entrance animation */
+  padding: 22px 18px 14px;
+  z-index: 300;
   animation: panelSlideDown 0.18s ease;
 }
 
-/* Slide-down keyframe animation for the dropdown */
-@keyframes panelSlideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Small decorative arrow pointing up toward the Sign In button */
-.nav-auth-panel::before {
+.nav-profile-panel::before {
   content: '';
   position: absolute;
   top: -7px;
-  right: 24px;
+  right: 14px;
   width: 13px;
   height: 13px;
   background: #ffffff;
   border-left: 1px solid var(--color-border);
   border-top: 1px solid var(--color-border);
-  transform: rotate(45deg);   /* Diamond rotated to make a triangle arrow */
+  transform: rotate(45deg);
 }
 
-/* Panel title */
-.nap-heading {
-  font-size: 1rem;
+/* Avatar upload button */
+.npp-avatar-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.npp-avatar-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.npp-avatar-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.npp-avatar-letter {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, 0.1);
+  border: 2px solid rgba(22, 163, 74, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-primary);
+}
+
+.npp-avatar-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.npp-avatar-wrap:hover .npp-avatar-overlay,
+.npp-avatar-wrap:disabled .npp-avatar-overlay {
+  opacity: 1;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.npp-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* User info */
+.npp-name {
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text);
-  margin-bottom: 16px;
   text-align: center;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Sign In / Sign Up toggle inside panel */
-.nap-tabs {
-  display: flex;
-  background: var(--color-bg);
-  border-radius: 8px;
-  padding: 3px;
-  margin-bottom: 18px;
-  gap: 3px;
-}
-
-.nap-tab {
-  flex: 1;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 0;
-  font-size: 0.85rem;
-  font-weight: 600;
+.npp-email {
+  font-size: 0.78rem;
   color: var(--color-text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.npp-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 14px 0 8px;
+}
+
+/* Action buttons */
+.npp-action-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 9px 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+  border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+  margin-bottom: 2px;
 }
 
-.nap-tab.active {
-  background: #ffffff;
+.npp-action-btn:hover {
+  background: var(--color-bg);
   color: var(--color-primary);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
 
-/* Form inputs stacked vertically */
-.nap-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.npp-signout {
+  color: var(--color-danger);
 }
 
-/* Slightly smaller inputs so they fit the compact panel */
-.nap-input {
-  padding: 9px 12px;
-  font-size: 0.88rem;
+.npp-signout:hover {
+  background: #fef2f2;
+  color: var(--color-danger-dk);
 }
 
-/* Error message inside panel */
-.nap-error {
-  font-size: 0.82rem;
-  font-weight: 600;
+.npp-danger {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.npp-danger:hover {
+  background: #fef2f2;
+  color: var(--color-danger-dk);
+}
+
+.npp-danger-warning {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+/* Error / success messages */
+.npp-error {
+  font-size: 0.8rem;
   color: #dc2626;
   background: #fef2f2;
   border: 1px solid rgba(239,68,68,0.2);
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 7px 10px;
   text-align: center;
+  margin-top: 8px;
 }
 
-/* Full-width submit button */
-.nap-submit {
-  width: 100%;
-  justify-content: center;
-  padding: 10px;
-  font-size: 0.9rem;
-  border-radius: 8px;
+.npp-success {
+  font-size: 0.8rem;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  padding: 7px 10px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* Change password form */
+.npp-pw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-top: 2px;
 }
 
-.nap-submit:disabled {
+.npp-pw-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.npp-back-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.npp-back-btn:hover {
+  color: var(--color-primary);
+}
+
+.npp-pw-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.npp-input {
+  padding: 9px 12px;
+  font-size: 0.88rem;
+}
+
+.npp-submit {
+  width: 100%;
+  justify-content: center;
+  padding: 10px;
+  font-size: 0.88rem;
+  border-radius: 8px;
+}
+
+.npp-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
 }
 
-/* Switch mode text line */
-.nap-switch {
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-  text-align: center;
-  margin-top: 14px;
-}
-
-.nap-switch-btn {
+.npp-forgot-pw-link {
   background: none;
   border: none;
-  color: var(--color-primary);
-  font-size: 0.82rem;
-  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
+  text-align: center;
   text-decoration: underline;
   text-underline-offset: 2px;
+  transition: color 0.15s;
+  width: 100%;
 }
 
-.nap-switch-btn:hover {
-  color: var(--color-primary-dk);
+.npp-forgot-pw-link:hover {
+  color: var(--color-primary);
 }
+
+.npp-forgot-pw-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

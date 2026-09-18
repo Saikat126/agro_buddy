@@ -1,22 +1,21 @@
 -- ─── 04_calendar_table.sql ────────────────────────────────────────────────────
+-- Converted from PostgreSQL (Supabase) to MySQL.
 
-
--- ── 1. Create the table ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS calendar_events (
 
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          CHAR(36) PRIMARY KEY DEFAULT (UUID()),
 
-  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id     CHAR(36) NOT NULL,
 
   -- What the event is (e.g., "Annual vaccination", "Sell calves at market").
-  title       TEXT NOT NULL CHECK (char_length(trim(title)) > 0),
+  title       VARCHAR(255) NOT NULL CHECK (CHAR_LENGTH(TRIM(title)) > 0),
 
   -- The day the event occurs. Stored as DATE (no time component) so calendar
   -- views can filter by year/month/day without time-zone complications.
   event_date  DATE NOT NULL,
 
   -- Category that determines which colour/icon the calendar uses.
-  event_type  TEXT NOT NULL DEFAULT 'other'
+  event_type  VARCHAR(20) NOT NULL DEFAULT 'other'
                 CHECK (event_type IN ('vet', 'harvest', 'market', 'medication', 'other')),
 
   -- Optional free-text description or reminder notes.
@@ -26,39 +25,19 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   completed   BOOLEAN NOT NULL DEFAULT FALSE,
 
   -- Optionally link the event to a specific animal.
-  animal_id   UUID REFERENCES animals(id) ON DELETE SET NULL,
+  animal_id   CHAR(36),
 
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-);
+  CONSTRAINT fk_calendar_user   FOREIGN KEY (user_id)   REFERENCES users(id)   ON DELETE CASCADE,
+  CONSTRAINT fk_calendar_animal FOREIGN KEY (animal_id) REFERENCES animals(id) ON DELETE SET NULL
 
-
--- ── 2. Row Level Security ─────────────────────────────────────────────────────
-ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own events"
-  ON calendar_events FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own events"
-  ON calendar_events FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own events"
-  ON calendar_events FOR UPDATE
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own events"
-  ON calendar_events FOR DELETE
-  USING (auth.uid() = user_id);
+) ENGINE=InnoDB;
 
 
--- ── 3. Indexes ────────────────────────────────────────────────────────────────
+-- ── Indexes ──────────────────────────────────────────────────────────────────
 -- Month view query: WHERE user_id = ? AND event_date BETWEEN start AND end
--- A composite index covers both columns in one scan.
-CREATE INDEX IF NOT EXISTS idx_calendar_user_date
-  ON calendar_events(user_id, event_date);
+CREATE INDEX idx_calendar_user_date  ON calendar_events(user_id, event_date);
 
 -- Filter by event type (e.g., show only vet visits on the calendar).
-CREATE INDEX IF NOT EXISTS idx_calendar_event_type ON calendar_events(event_type);
+CREATE INDEX idx_calendar_event_type ON calendar_events(event_type);

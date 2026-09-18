@@ -1,35 +1,21 @@
-// ─── TaskList.jsx — Feature: Task List ───────────────────────────────────────
-// Manages farm tasks (feeding, harvesting, vet visits, etc.).
-// Users can add tasks with a due date and priority level, mark them complete,
-// and delete them. Tasks are sorted so incomplete ones appear before completed.
-
 import React, { useState, useEffect, useMemo } from 'react';
-// useState  — local component state
-// useEffect — run side effects (API calls) after renders
-// useMemo   — memoize derived values (sorted task list) to avoid recalculating every render
-
 import './TaskList.css';
 import { fetchTasks, createTask, toggleTaskComplete, deleteTask } from './TaskListAPI';
 import { useConfirm } from '../shared/useConfirm';
 
-// Priority levels for the dropdown selector
-// Defined as a constant array outside the component so it's not recreated every render
+// Defined outside the component so this array isn't re-created on every render
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'];
 
 export default function TaskList({ autoAdd, onClearAutoAdd }) {
 
-  // tasks — full array of task objects from the server
   const { confirm, dialog } = useConfirm();
-  const [tasks, setTasks] = useState([]);
-
-  // filter — controls which tasks are visible: 'all', 'active', or 'completed'
-  const [filter, setFilter] = useState('all');
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [tasks,    setTasks]    = useState([]);
+  const [filter,   setFilter]   = useState('all'); // 'all' | 'active' | 'completed'
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
   const [showForm, setShowForm] = useState(false);
 
-  // Auto-open the add form when navigated here via the dashboard "+" button.
+  // When the Home dashboard "+" button navigates here, auto-open the add form
   useEffect(() => {
     if (autoAdd) {
       setShowForm(true);
@@ -37,7 +23,6 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
     }
   }, [autoAdd]);
 
-  // formData mirrors each input field in the "Add Task" form
   const [formData, setFormData] = useState({
     title:       '',
     dueDate:     '',
@@ -45,10 +30,9 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
     isRepeating: false,
   });
 
-  // ── Load tasks on first render ───────────────────────────────────────────────
   useEffect(() => {
     loadTasks();
-  }, []);  
+  }, []);
 
   async function loadTasks() {
     try {
@@ -64,35 +48,30 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
     }
   }
 
-  // ── filteredTasks (useMemo) ──────────────────────────────────────────────────
-  // useMemo computes filteredTasks only when tasks or filter changes.
-  // Without useMemo, this filtering would run on every single re-render (even unrelated ones).
-  // The result is a sorted array: incomplete tasks first, then completed.
+  // useMemo so we don't re-filter the entire list on every unrelated re-render.
+  // Incomplete tasks always come first (false < true numerically).
   const filteredTasks = useMemo(() => {
-    // First, filter by the active filter tab
     let result;
     if (filter === 'active') {
-      result = tasks.filter((t) => !t.completed);        // Only incomplete tasks
+      result = tasks.filter((t) => !t.completed);
     } else if (filter === 'completed') {
-      result = tasks.filter((t) => t.completed);         // Only completed tasks
+      result = tasks.filter((t) => t.completed);
     } else {
-      result = tasks;                                     // All tasks
+      result = tasks;
     }
 
-    // Sort: incomplete (false) before completed (true).
-    // Booleans compare as 0 and 1, so false - true = -1 (incomplete comes first).
+    // sort so incomplete tasks float to the top
     return [...result].sort((a, b) => a.completed - b.completed);
-  }, [tasks, filter]);  // Re-run whenever tasks array or filter string changes
+  }, [tasks, filter]);
 
-  // ── handleInputChange ───────────────────────────────────────────────────────
   function handleInputChange(e) {
     const { name, value, type, checked } = e.target;
+    // Checkboxes have a `checked` property instead of `value`
     setFormData((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   }
 
-  // ── handleAddTask ───────────────────────────────────────────────────────────
   async function handleAddTask(e) {
-    e.preventDefault();   // Prevent page reload
+    e.preventDefault();
 
     if (!formData.title.trim()) {
       alert('Task title is required.');
@@ -101,6 +80,7 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
 
     try {
       const newTask = await createTask({ ...formData, completed: false });
+      // Prepend so the new task appears at the top of the list immediately
       setTasks((prev) => [newTask, ...prev]);
       setFormData({ title: '', dueDate: '', priority: 'Medium', isRepeating: false });
       setShowForm(false);
@@ -110,34 +90,32 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
     }
   }
 
-  // ── handleToggle ────────────────────────────────────────────────────────────
   async function handleToggle(task) {
-    if (task.isRepeating) return;           // Repeating tasks are never completed
+    // Repeating tasks are designed to never be "done" — skip them
+    if (task.isRepeating) return;
     const newCompleted = !task.completed;
 
     try {
-      // Optimistic update: change local state BEFORE the API responds
-      // so the UI feels instant. If the API fails, we roll back.
+      // Optimistic update: change the UI instantly so it feels snappy,
+      // then confirm with the server. If it fails, we roll back below.
       setTasks((prev) =>
         prev.map((t) =>
           t.id === task.id ? { ...t, completed: newCompleted } : t
         )
       );
 
-      // Confirm the change on the server
       await toggleTaskComplete(task.id, newCompleted);
     } catch (err) {
-      // Rollback: revert the optimistic update if the server call failed
+      // Server call failed — put the old value back so the UI stays accurate
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === task.id ? { ...t, completed: task.completed } : t  // restore original
+          t.id === task.id ? { ...t, completed: task.completed } : t
         )
       );
       setError('Failed to update task. Reverted.');
     }
   }
 
-  // ── handleDelete ────────────────────────────────────────────────────────────
   async function handleDelete(task) {
     if (!await confirm('Delete this task?')) return;
     try {
@@ -148,18 +126,15 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
     }
   }
 
-  // ── priorityClass ───────────────────────────────────────────────────────────
-  // Returns a CSS class based on priority string so we can color-code priorities.
+  // Maps priority string to a CSS class like "priority-high" for color coding
   function priorityClass(priority) {
-    return `priority-${priority.toLowerCase()}`;  // e.g. "priority-high"
+    return `priority-${priority.toLowerCase()}`;
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="task-list">
       {dialog}
 
-      {/* Header: title + add button */}
       <div className="tl-header">
         <h2 className="section-title">Task List</h2>
         <button className="btn-primary" onClick={() => {
@@ -170,23 +145,19 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
         </button>
       </div>
 
-      {/* Filter tabs: All / Active / Completed */}
+      {/* Filter tabs */}
       <div className="tl-filters">
-        {/* Render one filter button per option */}
         {['all', 'active', 'completed'].map((f) => (
           <button
             key={f}
-            // Active filter gets a highlighted class
             className={`tl-filter-btn ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}    // Switch the filter state
+            onClick={() => setFilter(f)}
           >
-            {/* Capitalise the first letter for display */}
             {f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
       </div>
 
-      {/* ── Add Task Form ── (conditionally rendered) */}
       {showForm && (
         <form className="tl-form card" onSubmit={handleAddTask}>
           <h3 className="tl-form-title">New Task</h3>
@@ -206,7 +177,6 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
           <div className="tl-row">
             <label className="ap-label">
               Due Date
-              {/* type="date" renders a native date picker */}
               <input
                 className="input-field"
                 type="date"
@@ -218,14 +188,12 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
 
             <label className="ap-label">
               Priority
-              {/* <select> dropdown for priority level */}
               <select
                 className="input-field"
                 name="priority"
                 value={formData.priority}
                 onChange={handleInputChange}
               >
-                {/* Render one <option> per priority level */}
                 {PRIORITY_OPTIONS.map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
@@ -248,20 +216,19 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
         </form>
       )}
 
-      {/* Status messages */}
       {loading && <p className="ap-loading">Loading tasks...</p>}
       {error   && <p className="ap-error">{error}</p>}
       {!loading && !error && filteredTasks.length === 0 && (
         <p className="ap-empty">No tasks here. Add one above!</p>
       )}
 
-      {/* ── Task Items ── */}
       <ul className="tl-items">
         {filteredTasks.map((task) => (
           <li
             key={task.id}
             className={`tl-item card ${task.completed ? 'completed' : ''} ${task.isRepeating ? 'repeating' : ''}`}
           >
+            {/* Repeating tasks show a loop icon instead of a checkbox because they can't be completed */}
             {task.isRepeating ? (
               <span className="tl-repeat-icon" title="Repeating task">↻</span>
             ) : (
@@ -277,6 +244,7 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
               <span className="tl-title">{task.title}</span>
               <div className="tl-meta">
                 {task.dueDate && (
+                  // Flip from YYYY-MM-DD to DD-MM-YYYY for display
                   <span className="tl-date">
                     Due: {task.dueDate.split('-').reverse().join('-')}
                   </span>

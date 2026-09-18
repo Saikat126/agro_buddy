@@ -1,251 +1,283 @@
-// ─── Auth.jsx — Sign In / Sign Up Screen ─────────────────────────────────────
-// A full-page authentication screen shown when no user is logged in.
-// Toggles between "Sign In" and "Sign Up" forms on the same card.
-// On success it calls onAuthSuccess(user) so App.jsx can store the user and
-// reveal the main application.
-
 import React, { useState } from 'react';
 import './Auth.css';
-import { login, signup } from './AuthAPI';
+import { signIn, signUp, requestPasswordReset, resetPassword } from './AuthAPI';
 
-// Logo from public folder — same reference used in the Navbar
 const logo = process.env.PUBLIC_URL + '/logo.png';
 
-// ── Component ──────────────────────────────────────────────────────────────────
-// @prop onAuthSuccess — function called by App.jsx; receives the user object
-//                       so the parent can store it and hide this screen.
-export default function Auth({ onAuthSuccess }) {
+// forceMode — when 'reset', skip the tabs and show the set-new-password form.
+//             Passed by App.jsx after finding a ?token= in the URL.
+// resetToken — the token from that URL, submitted alongside the new password.
+// onResetDone — called after a successful password update so App.jsx can hide the overlay.
+// onCancel — when provided, shows a close button so the page can be dismissed without signing in
+//            (e.g. a guest who opened it from the navbar and wants to keep browsing).
+export default function Auth({ onAuthSuccess, forceMode, resetToken, onResetDone, onCancel }) {
 
-  // mode — controls which form is visible: 'signin' or 'signup'
-  const [mode, setMode] = useState('signin');
+  const [mode, setMode] = useState(forceMode || 'signin');
 
-  // fields — all form input values in one object
   const [fields, setFields] = useState({
-    name:            '',   
+    name:            '',
     email:           '',
     password:        '',
-    confirmPassword: '',   
+    confirmPassword: '',
   });
 
-  // error — validation or API error message shown below the form
-  const [error, setError] = useState('');
-
-  // loading — true while the API request is in flight; disables the button
+  const [error,   setError]   = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ── switchMode ────────────────────────────────────────────────────────────
-  // Clears all fields and errors when toggling between Sign In and Sign Up.
   function switchMode(newMode) {
+    if (newMode === mode) return;
     setMode(newMode);
     setFields({ name: '', email: '', password: '', confirmPassword: '' });
     setError('');
+    setSuccess('');
   }
 
-  // ── handleChange ──────────────────────────────────────────────────────────
-  // Single handler for all inputs — updates only the field that changed.
   function handleChange(e) {
     const { name, value } = e.target;
-    setError('');   // clear error as soon as the user starts correcting input
+    setError('');
     setFields((prev) => ({ ...prev, [name]: value }));
   }
 
-  // ── validate ──────────────────────────────────────────────────────────────
-  // Runs client-side checks before touching the API.
-  // Returns an error string, or '' if everything is valid.
-  function validate() {
-    if (mode === 'signup' && !fields.name.trim()) {
-      return 'Please enter your full name.';
-    }
-    if (!fields.email.trim()) {
-      return 'Please enter your email address.';
-    }
-    // Basic email format check using a simple regex
-    if (!/\S+@\S+\.\S+/.test(fields.email)) {
-      return 'Please enter a valid email address.';
-    }
-    if (fields.password.length < 6) {
-      return 'Password must be at least 6 characters.';
-    }
-    if (mode === 'signup' && fields.password !== fields.confirmPassword) {
-      return 'Passwords do not match.';
-    }
-    return '';   // no errors
+  // Chrome (and others) will silently auto-populate a saved credential into a matching
+  // field the instant the page loads. Making the field readOnly until it's focused stops
+  // that auto-fill-on-load while still letting the browser offer its suggestion dropdown
+  // once the user actually clicks/taps into the field — same as most other sites.
+  function preventAutoFill(e) {
+    e.target.removeAttribute('readonly');
   }
 
-  // ── handleSubmit ──────────────────────────────────────────────────────────
-  // Validates, calls the correct API function, and notifies the parent on success.
-  async function handleSubmit(e) {
-    e.preventDefault();   // prevent browser page reload
-
-    // Run client-side validation first — don't hit the server with bad data
-    const validationError = validate();
-    if (validationError) {
-      setError(validationError);
-      return;
+  function validate() {
+    if (mode === 'signup' && !fields.name.trim()) return 'Please enter your full name.';
+    if (!fields.email.trim()) return 'Please enter your email address.';
+    if (!/\S+@\S+\.\S+/.test(fields.email)) return 'Please enter a valid email address.';
+    if (mode !== 'forgot') {
+      if (fields.password.length < 6) return 'Password must be at least 6 characters.';
+      if (mode === 'signup' && fields.password !== fields.confirmPassword) return 'Passwords do not match.';
+      if (mode === 'reset' && fields.password !== fields.confirmPassword) return 'Passwords do not match.';
     }
+    return '';
+  }
+
+  // ── Sign in / Sign up ─────────────────────────────────────────────────────
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const validationError = validate();
+    if (validationError) { setError(validationError); return; }
 
     try {
       setLoading(true);
       setError('');
-
-      let result;
       if (mode === 'signin') {
-        // login() returns { token, user }
-        result = await login(fields.email, fields.password);
+        const { user } = await signIn(fields.email, fields.password);
+        onAuthSuccess?.(user);
       } else {
-        // signup() returns { token, user }
-        result = await signup(fields.name, fields.email, fields.password);
+        const { user } = await signUp(fields.email, fields.password, fields.name);
+        onAuthSuccess?.(user);
       }
-
-      // Store the JWT token in localStorage so it survives page refreshes.
-      // Future API calls can read this and attach it as an Authorization header.
-      localStorage.setItem('agro_token', result.token);
-
-      // Store the user object as a JSON string so App.jsx can read it back.
-      localStorage.setItem('agro_user', JSON.stringify(result.user));
-
-      // Tell App.jsx who just logged in — it will hide this screen and show the app.
-      onAuthSuccess(result.user);
-
     } catch (err) {
-      // Show the server's error message if available, otherwise a generic fallback
       setError(
-        err.response?.data?.message ||
-        (mode === 'signin'
+        mode === 'signin'
           ? 'Invalid email or password.'
-          : 'Could not create account. Try a different email.')
+          : 'Could not create account. Try a different email.'
       );
     } finally {
       setLoading(false);
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    // auth-page fills the full viewport with a soft background
-    <div className="auth-page">
+  // ── Forgot password ───────────────────────────────────────────────────────
+  async function handleForgot(e) {
+    e.preventDefault();
+    if (!fields.email.trim() || !/\S+@\S+\.\S+/.test(fields.email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    try {
+      setLoading(true);
+      setError('');
+      await requestPasswordReset(fields.email);
+      setSuccess('Reset link sent! Check your inbox and click the link to set a new password.');
+    } catch (err) {
+      setError('Could not send reset email. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      {/* Centred auth card */}
+  // ── Set new password (recovery mode) ─────────────────────────────────────
+  async function handleReset(e) {
+    e.preventDefault();
+    if (fields.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (fields.password !== fields.confirmPassword) { setError('Passwords do not match.'); return; }
+    try {
+      setLoading(true);
+      setError('');
+      await resetPassword(resetToken, fields.password);
+      setSuccess('Password updated! You can now login with your new password.');
+      setTimeout(() => onResetDone?.(), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to update password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const pageStyle = {
+    backgroundImage: `linear-gradient(135deg, rgba(15,36,23,0.65) 0%, rgba(13,51,32,0.55) 100%), url(${process.env.PUBLIC_URL}/hero.jpeg)`,
+  };
+
+  return (
+    <div className="auth-page" style={pageStyle}>
       <div className="auth-card">
 
-        {/* ── Logo + app name ── */}
+        {onCancel && (
+          <button className="auth-close-btn" onClick={onCancel} type="button" aria-label="Close">
+            ✕
+          </button>
+        )}
+
         <div className="auth-brand">
           <img src={logo} alt="Agro Buddy" className="auth-logo" />
           <h1 className="auth-app-name">Agro Buddy</h1>
           <p className="auth-tagline">Your smart farm management companion</p>
         </div>
 
-        {/* ── Mode toggle tabs (Sign In / Sign Up) ── */}
-        <div className="auth-tabs">
-          {/* Each tab button highlights when its mode is active */}
-          <button
-            className={`auth-tab ${mode === 'signin' ? 'active' : ''}`}
-            onClick={() => switchMode('signin')}
-            type="button"    // type="button" prevents accidental form submission
-          >
-            Sign In
-          </button>
-          <button
-            className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
-            onClick={() => switchMode('signup')}
-            type="button"
-          >
-            Sign Up
-          </button>
-        </div>
+        {/* Tabs — hidden in forgot/reset modes */}
+        {mode !== 'forgot' && mode !== 'reset' && (
+          <div className="auth-tabs">
+            <button className={`auth-tab ${mode === 'signin' ? 'active' : ''}`} onClick={() => switchMode('signin')} type="button">Login</button>
+            <button className={`auth-tab ${mode === 'signup' ? 'active' : ''}`} onClick={() => switchMode('signup')} type="button">Sign Up</button>
+          </div>
+        )}
 
-        {/* ── Form ── */}
-        <form className="auth-form" onSubmit={handleSubmit}>
+        {/* Forgot password heading */}
+        {mode === 'forgot' && (
+          <div className="auth-mode-header">
+            <h2 className="auth-mode-title">Forgot Password</h2>
+            <p className="auth-mode-sub">Enter your email and we'll send you a reset link.</p>
+          </div>
+        )}
 
-          {/* Name field — only shown in Sign Up mode */}
-          {mode === 'signup' && (
+        {/* Reset password heading */}
+        {mode === 'reset' && (
+          <div className="auth-mode-header">
+            <h2 className="auth-mode-title">Set New Password</h2>
+            <p className="auth-mode-sub">Choose a new password for your account.</p>
+          </div>
+        )}
+
+        {/* ── Sign in / Sign up form ── */}
+        {(mode === 'signin' || mode === 'signup') && (
+          <form className="auth-form" onSubmit={handleSubmit}>
+            {mode === 'signup' && (
+              <label className="auth-label">
+                Full Name
+                <input className="input-field" type="text" name="name" value={fields.name} onChange={handleChange} placeholder="e.g. Ahmed Rahman" autoComplete="name" readOnly onFocus={preventAutoFill} />
+              </label>
+            )}
             <label className="auth-label">
-              Full Name
-              <input
-                className="input-field"
-                type="text"
-                name="name"
-                value={fields.name}
-                onChange={handleChange}
-                placeholder="e.g. Ahmed Rahman"
-                autoComplete="name"
-              />
+              Email Address
+              <input className="input-field" type="email" name="email" value={fields.email} onChange={handleChange} placeholder="you@example.com" autoComplete="email" readOnly onFocus={preventAutoFill} />
             </label>
-          )}
-
-          {/* Email — shown in both modes */}
-          <label className="auth-label">
-            Email Address
-            <input
-              className="input-field"
-              type="email"
-              name="email"
-              value={fields.email}
-              onChange={handleChange}
-              placeholder="you@example.com"
-              autoComplete="email"
-            />
-          </label>
-
-          {/* Password — shown in both modes */}
-          <label className="auth-label">
-            Password
-            <input
-              className="input-field"
-              type="password"       // type="password" hides characters as the user types
-              name="password"
-              value={fields.password}
-              onChange={handleChange}
-              placeholder="Minimum 6 characters"
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            />
-          </label>
-
-          {/* Confirm Password — only shown in Sign Up mode */}
-          {mode === 'signup' && (
             <label className="auth-label">
-              Confirm Password
-              <input
-                className="input-field"
-                type="password"
-                name="confirmPassword"
-                value={fields.confirmPassword}
-                onChange={handleChange}
-                placeholder="Re-enter your password"
-                autoComplete="new-password"
-              />
+              Password
+              <input className="input-field" type="password" name="password" value={fields.password} onChange={handleChange} placeholder="Minimum 6 characters" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} readOnly onFocus={preventAutoFill} />
             </label>
-          )}
+            {mode === 'signup' && (
+              <label className="auth-label">
+                Confirm Password
+                <input className="input-field" type="password" name="confirmPassword" value={fields.confirmPassword} onChange={handleChange} placeholder="Re-enter your password" autoComplete="new-password" readOnly onFocus={preventAutoFill} />
+              </label>
+            )}
 
-          {/* Error message — only visible when error state is non-empty */}
-          {error && <p className="auth-error">{error}</p>}
+            {/* Forgot password link — only in sign-in mode */}
+            {mode === 'signin' && (
+              <button type="button" className="auth-forgot-link" onClick={() => switchMode('forgot')}>
+                Forgot password?
+              </button>
+            )}
 
-          {/* Submit button — disabled while the API call is pending */}
-          <button
-            type="submit"
-            className="btn-primary auth-submit"
-            disabled={loading}   // disabling prevents double-submissions
-          >
-            {/* Label changes while loading so the user knows something is happening */}
-            {loading
-              ? (mode === 'signin' ? 'Signing in...' : 'Creating account...')
-              : (mode === 'signin' ? 'Sign In' : 'Create Account')}
-          </button>
-        </form>
+            {error   && <p className="auth-error">{error}</p>}
+            {success && <p className="auth-success">{success}</p>}
 
-        {/* ── Switch mode link at the bottom ── */}
-        <p className="auth-switch">
-          {mode === 'signin'
-            ? "Don't have an account? "
-            : 'Already have an account? '}
-          <button
-            className="auth-switch-btn"
-            onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
-            type="button"
-          >
-            {mode === 'signin' ? 'Sign Up' : 'Sign In'}
-          </button>
-        </p>
+            <button type="submit" className="btn-primary auth-submit" disabled={loading}>
+              {loading
+                ? (mode === 'signin' ? 'Logging in…' : 'Creating account…')
+                : (mode === 'signin' ? 'Login' : 'Create Account')}
+            </button>
+          </form>
+        )}
+
+        {/* ── Forgot password form ── */}
+        {mode === 'forgot' && (
+          <form className="auth-form" onSubmit={handleForgot}>
+            <label className="auth-label">
+              Email Address
+              <input className="input-field" type="email" name="email" value={fields.email} onChange={handleChange} placeholder="you@example.com" autoComplete="email" readOnly onFocus={preventAutoFill} />
+            </label>
+
+            {error   && <p className="auth-error">{error}</p>}
+            {success && <p className="auth-success">{success}</p>}
+
+            {!success && (
+              <button type="submit" className="btn-primary auth-submit" disabled={loading}>
+                {loading ? 'Sending…' : 'Send Reset Link'}
+              </button>
+            )}
+          </form>
+        )}
+
+        {/* ── Set new password form ── */}
+        {mode === 'reset' && (
+          <form className="auth-form" onSubmit={handleReset}>
+            <label className="auth-label">
+              New Password
+              <input className="input-field" type="password" name="password" value={fields.password} onChange={handleChange} placeholder="Minimum 6 characters" autoComplete="new-password" readOnly onFocus={preventAutoFill} />
+            </label>
+            <label className="auth-label">
+              Confirm New Password
+              <input className="input-field" type="password" name="confirmPassword" value={fields.confirmPassword} onChange={handleChange} placeholder="Re-enter new password" autoComplete="new-password" readOnly onFocus={preventAutoFill} />
+            </label>
+
+            {error   && <p className="auth-error">{error}</p>}
+            {success && <p className="auth-success">{success}</p>}
+
+            {!success && (
+              <button type="submit" className="btn-primary auth-submit" disabled={loading}>
+                {loading ? 'Updating…' : 'Update Password'}
+              </button>
+            )}
+          </form>
+        )}
+
+        {/* Bottom nav — back to sign in for forgot mode */}
+        {mode === 'forgot' && (
+          <p className="auth-switch">
+            <button className="auth-switch-btn" onClick={() => switchMode('signin')} type="button">← Back to Login</button>
+          </p>
+        )}
+
+        {/* Let the user request a fresh link if the reset session has expired */}
+        {mode === 'reset' && error && (
+          <p className="auth-switch">
+            <button className="auth-switch-btn" onClick={() => switchMode('forgot')} type="button">
+              Request a new reset link
+            </button>
+          </p>
+        )}
+
+        {/* Bottom nav — sign in / sign up toggle */}
+        {(mode === 'signin' || mode === 'signup') && (
+          <p className="auth-switch">
+            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+            <button className="auth-switch-btn" onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')} type="button">
+              {mode === 'signin' ? 'Sign Up' : 'Login'}
+            </button>
+          </p>
+        )}
+
       </div>
     </div>
   );

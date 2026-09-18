@@ -1,80 +1,58 @@
 -- ─── 03_marketplace_table.sql ─────────────────────────────────────────────────
+-- Converted from PostgreSQL (Supabase) to MySQL.
+--
+-- The old "anyone can view available listings" RLS policy (and its later
+-- fix_marketplace_public_read.sql patch) becomes a plain rule in the backend:
+-- GET /marketplace has no auth check at all, while POST/PUT/DELETE require the
+-- caller to be authenticated and own the row (WHERE user_id = req.user.id).
 
-
--- ── 1. Create the table ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS marketplace_items (
 
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id           CHAR(36) PRIMARY KEY DEFAULT (UUID()),
 
   -- The farmer who posted this listing.
-  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id      CHAR(36) NOT NULL,
 
   -- Display title for the listing (e.g., "Friesian Cow — 3 years old").
-  title        TEXT NOT NULL CHECK (char_length(trim(title)) > 0),
+  title        VARCHAR(255) NOT NULL CHECK (CHAR_LENGTH(TRIM(title)) > 0),
 
   -- Product category. CHECK restricts to the predefined list so the UI's
   -- category filter always matches valid database values.
-  category     TEXT NOT NULL
+  category     VARCHAR(50) NOT NULL
                  CHECK (category IN ('Livestock', 'Crops', 'Equipment', 'Supplies', 'Other')),
 
-  -- Price in local currency (up to 99,999,999,999.99).
-  -- CHECK ensures the price is always positive.
-  price        NUMERIC(12, 2) NOT NULL CHECK (price > 0),
+  -- Price in local currency (up to 99,999,999,999.99). Must be positive.
+  price        DECIMAL(12, 2) NOT NULL CHECK (price > 0),
 
   -- Unit of sale (e.g., "per head", "per kg", "each").
-  unit         TEXT NOT NULL CHECK (char_length(trim(unit)) > 0),
+  unit         VARCHAR(100) NOT NULL CHECK (CHAR_LENGTH(TRIM(unit)) > 0),
 
-  -- Seller's display name (can differ from the auth account name).
-  seller_name  TEXT NOT NULL CHECK (char_length(trim(seller_name)) > 0),
+  -- Seller's display name (can differ from the account's own name).
+  seller_name  VARCHAR(255) NOT NULL CHECK (CHAR_LENGTH(TRIM(seller_name)) > 0),
 
   -- Longer description of the product.
   description  TEXT,
 
   -- Optional URL to a product image.
-  image_url    TEXT,
+  image_url    VARCHAR(1024),
 
   -- Whether this listing is still active. Sellers can "hide" a listing
   -- without deleting it by setting this to FALSE.
   available    BOOLEAN NOT NULL DEFAULT TRUE,
 
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-);
+  CONSTRAINT fk_marketplace_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 
-
--- ── 2. Row Level Security ─────────────────────────────────────────────────────
-ALTER TABLE marketplace_items ENABLE ROW LEVEL SECURITY;
-
--- PUBLIC READ: everyone (signed-in OR signed-out) can browse available listings.
--- USING (true) means no restriction on SELECT — the available=TRUE filter in
--- the API query still hides sold/hidden listings.
-CREATE POLICY "Anyone can view available listings"
-  ON marketplace_items FOR SELECT
-  USING (true);
-
--- Only the owner can post new listings (they cannot impersonate other sellers).
-CREATE POLICY "Users can insert own listings"
-  ON marketplace_items FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
--- Only the owner can edit their listing.
-CREATE POLICY "Users can update own listings"
-  ON marketplace_items FOR UPDATE
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
--- Only the owner can remove their listing.
-CREATE POLICY "Users can delete own listings"
-  ON marketplace_items FOR DELETE
-  USING (auth.uid() = user_id);
+) ENGINE=InnoDB;
 
 
--- ── 3. Indexes ────────────────────────────────────────────────────────────────
+-- ── Indexes ──────────────────────────────────────────────────────────────────
 -- Browsing and filtering by category is the most common query.
-CREATE INDEX IF NOT EXISTS idx_marketplace_category  ON marketplace_items(category);
+CREATE INDEX idx_marketplace_category  ON marketplace_items(category);
 
 -- Filter to show only available listings efficiently.
-CREATE INDEX IF NOT EXISTS idx_marketplace_available ON marketplace_items(available);
+CREATE INDEX idx_marketplace_available ON marketplace_items(available);
 
 -- Seller's own listings page: quick lookup by user_id.
-CREATE INDEX IF NOT EXISTS idx_marketplace_user_id   ON marketplace_items(user_id);
+CREATE INDEX idx_marketplace_user_id   ON marketplace_items(user_id);
