@@ -186,6 +186,102 @@
   text-align: right;
 }
 
+/* "Your Listing" cards open the performance modal on click */
+.mp-card-clickable {
+  cursor: pointer;
+}
+
+/* ── Listing performance modal ── */
+.mp-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.mp-detail-dialog {
+  position: relative;
+  background: var(--color-surface, #fff);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mp-detail-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.mp-detail-close:hover {
+  background: var(--color-primary-lt);
+  color: var(--color-primary-dk);
+}
+
+.mp-detail-status {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.mp-detail-status strong {
+  color: var(--color-text);
+}
+
+.mp-detail-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 6px 0;
+}
+
+.mp-detail-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mp-detail-stats {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-detail-stats li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.mp-detail-stats strong {
+  color: var(--color-text);
+}
+
 /* Shown in place of the Post button when the user is not signed in */
 .mp-signin-hint {
   font-size: 0.85rem;
@@ -212,6 +308,13 @@
 }
 
 /* Form title */
+.mp-form {
+  /* The navbar is position: sticky at 64px tall and sits above everything
+     (z-index: 200) — without this, scrollIntoView's default target-to-top
+     alignment lands the form right under it, hiding the heading/top fields. */
+  scroll-margin-top: 80px;
+}
+
 .mp-form-title {
   font-size: 1rem;
   font-weight: 700;

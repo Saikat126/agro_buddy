@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './Marketplace.css';
-import { fetchListings, createListing, deleteListing, uploadListingImage, VALID_CATEGORIES } from './MarketplaceAPI';
+import { fetchListings, createListing, updateListing, deleteListing, uploadListingImage, fetchListingPerformance, VALID_CATEGORIES } from './MarketplaceAPI';
 import { fetchSellerOrders, updateOrderStatus, deleteOrder } from '../Checkout/OrdersAPI';
 import { useConfirm } from '../shared/useConfirm';
+import { capitalizedValue } from '../shared/textCase';
 
 export default function Marketplace({ user, addToCart, onGoToCheckout }) {
 
@@ -11,6 +12,27 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
   // 'browse' shows listings; 'orders' shows incoming orders for sellers
   const [view,     setView]     = useState('browse');
   const [listings, setListings] = useState([]);
+
+  // Detail view opened by clicking one of "Your Listings" — holds the full
+  // record (including the sales totals the backend joins in) for whichever
+  // listing was clicked, or null when the modal is closed.
+  const [detailListing, setDetailListing] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError,   setDetailError]   = useState(null);
+
+  async function openPerformance(id) {
+    setDetailListing({}); // opens the modal immediately with a loading state
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const data = await fetchListingPerformance(id);
+      setDetailListing(data);
+    } catch (err) {
+      setDetailError('Could not load this listing\'s performance.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }
 
   // Search is the only way to discover other people's listings —
   // no search = no results, so the page isn't a firehose on first load
@@ -25,16 +47,36 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     category:    'Livestock',
     price:       '',
     unit:        '',
-    seller_name: '',
     description: '',
   });
 
-  // Product photo for the listing being created — held as a local file/preview
-  // until submit, when it's uploaded and its URL is attached to the listing.
+  // Product photo for the listing being created/edited — held as a local
+  // file/preview until submit, when it's uploaded and its URL is attached.
   const [imageFile,      setImageFile]      = useState(null);
   const [imagePreview,   setImagePreview]   = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef(null);
+  const formRef = useRef(null);
+
+  // Set to a listing's id while editing it (instead of creating a new one).
+  // The photo it already had, kept separately so saving an edit without
+  // picking a new file doesn't wipe out the existing one.
+  const [editingId,        setEditingId]        = useState(null);
+  const [existingImageUrl, setExistingImageUrl]  = useState(null);
+
+  // Bumped on every "Edit" click (see startEdit) so the scroll effect below
+  // always re-fires — even re-selecting the *same* listing that's already
+  // open, where neither showForm nor editingId actually change value, so a
+  // dependency on those alone wouldn't re-trigger it.
+  const [scrollTrigger, setScrollTrigger] = useState(0);
+
+  // Whenever the form opens (adding or editing), scroll it into view — it
+  // renders at the top of the page, so without this, opening it while
+  // scrolled down (e.g. after clicking "Edit" from a card further down the
+  // grid) looks like nothing happened.
+  useEffect(() => {
+    if (showForm) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showForm, editingId, scrollTrigger]);
 
   const [sellerOrders,  setSellerOrders]  = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -53,12 +95,21 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
 
   async function handleOrderStatusChange(orderId, newStatus) {
     try {
-      if (newStatus === 'cancelled' || newStatus === 'delivered') {
-        // We delete the order entirely when it's cancelled or delivered —
-        // cascade removes the order_items rows too
+      if (newStatus === 'removed') {
+        // Only ever sent for an order already in a terminal state
+        // (delivered/cancelled, enforced by the button's own visibility
+        // below) — the transaction is fully resolved by then, so deleting
+        // the row outright (cascading to order_items) has nothing left to protect.
         await deleteOrder(orderId);
         setSellerOrders((prev) => prev.filter((entry) => entry.order.id !== orderId));
       } else {
+        // 'confirmed', 'delivered', and 'cancelled' all persist a real status
+        // value instead of deleting the row. This is what lets a paid order
+        // still be marked delivered (deleting it would discard its payment
+        // record), and lets a cancelled order actually show up — and later
+        // be removed — in the buyer's own order history instead of just
+        // vanishing. Cancelling a paid order is still blocked server-side
+        // (409) since that would need a refund first.
         await updateOrderStatus(orderId, newStatus);
         setSellerOrders((prev) =>
           prev.map((entry) =>
@@ -69,7 +120,10 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
         );
       }
     } catch (err) {
-      setOrdersError('Could not update order. Please try again.');
+      // A paid-online order returns 409 with a specific message (see
+      // orders.routes.js) rather than the generic fallback — show it as-is
+      // since it tells the seller exactly why the action was blocked.
+      setOrdersError(err.message || 'Could not update order. Please try again.');
       console.error(err);
     }
   }
@@ -110,15 +164,34 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
   const isSearching = searchQuery.trim().length > 0;
 
   function handleInputChange(e) {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: capitalizedValue(e) }));
   }
 
   function resetForm() {
-    setFormData({ title: '', category: 'Livestock', price: '', unit: '', seller_name: '', description: '' });
+    setFormData({ title: '', category: 'Livestock', price: '', unit: '', description: '' });
     setImageFile(null);
     setImagePreview(null);
+    setEditingId(null);
+    setExistingImageUrl(null);
     if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  // Opens the form pre-filled with an existing listing's data instead of blank.
+  function startEdit(listing) {
+    setEditingId(listing.id);
+    setFormData({
+      title:       listing.title || '',
+      category:    listing.category || 'Livestock',
+      price:       listing.price || '',
+      unit:        listing.unit || '',
+      description: listing.description || '',
+    });
+    setImageFile(null);
+    setImagePreview(listing.image_url || null);
+    setExistingImageUrl(listing.image_url || null);
+    setShowForm(true);
+    setScrollTrigger((n) => n + 1); // always re-scroll, even re-selecting the same listing
   }
 
   function handleImageChange(e) {
@@ -137,27 +210,35 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
     setImagePreview(URL.createObjectURL(file));
   }
 
-  async function handleAddListing(e) {
+  async function handleSubmitListing(e) {
     e.preventDefault();
 
-    if (!formData.title.trim() || !formData.price || !formData.seller_name.trim()) {
-      alert('Title, price, and seller name are required.');
+    if (!formData.title.trim() || !formData.price) {
+      alert('Title and price are required.');
       return;
     }
 
     try {
-      let image_url = null;
+      // Keep the existing photo unless a new one was picked — otherwise
+      // saving an edit without touching the photo field would wipe it out.
+      let image_url = existingImageUrl;
       if (imageFile) {
         setImageUploading(true);
         image_url = await uploadListingImage(imageFile);
       }
-      const newListing = await createListing({ ...formData, image_url });
-      // Prepend so the new listing appears at the top without a full re-fetch
-      setListings((prev) => [newListing, ...prev]);
+
+      if (editingId) {
+        const updated = await updateListing(editingId, { ...formData, image_url });
+        setListings((prev) => prev.map((item) => (item.id === editingId ? updated : item)));
+      } else {
+        const newListing = await createListing({ ...formData, image_url });
+        // Prepend so the new listing appears at the top without a full re-fetch
+        setListings((prev) => [newListing, ...prev]);
+      }
       resetForm();
       setShowForm(false);
     } catch (err) {
-      setError('Failed to post listing.');
+      setError(editingId ? 'Failed to save changes.' : 'Failed to post listing.');
       console.error(err);
     } finally {
       setImageUploading(false);
@@ -191,22 +272,27 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
               </button>
               <button
                 className={`mp-toggle-btn ${view === 'orders' ? 'active' : ''}`}
-                onClick={() => setView('orders')}
+                onClick={() => {
+                  if (showForm) { resetForm(); setShowForm(false); }
+                  setView('orders');
+                }}
               >
                 Incoming Orders
               </button>
             </div>
           )}
         </div>
-        {user ? (
-          <button className="btn-primary" onClick={() => {
-            if (showForm) resetForm();
-            setShowForm((p) => !p);
-          }}>
-            {showForm ? 'Cancel' : '+ Post Listing'}
-          </button>
-        ) : (
-          <span className="mp-signin-hint">Login to post a listing</span>
+        {view !== 'orders' && (
+          user ? (
+            <button className="btn-primary" onClick={() => {
+              if (showForm) resetForm();
+              setShowForm((p) => !p);
+            }}>
+              {showForm ? 'Cancel' : '+ Post Listing'}
+            </button>
+          ) : (
+            <span className="mp-signin-hint">Login to post a listing</span>
+          )
         )}
       </div>
 
@@ -224,8 +310,8 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
       <>
 
       {showForm && user && (
-        <form className="mp-form card" onSubmit={handleAddListing}>
-          <h3 className="mp-form-title">New Listing</h3>
+        <form ref={formRef} className="mp-form card" onSubmit={handleSubmitListing}>
+          <h3 className="mp-form-title">{editingId ? 'Edit Listing' : 'New Listing'}</h3>
 
           <label className="ap-label">
             Product Photo
@@ -273,7 +359,7 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
 
           <div className="mp-row">
             <label className="ap-label">
-              Price ($) *
+              Price (BDT) *
               <input
                 className="input-field"
                 type="number"
@@ -299,18 +385,6 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
           </div>
 
           <label className="ap-label">
-            Seller Name *
-            <input
-              className="input-field"
-              type="text"
-              name="seller_name"
-              value={formData.seller_name}
-              onChange={handleInputChange}
-              placeholder="Your name or farm name"
-            />
-          </label>
-
-          <label className="ap-label">
             Description
             <textarea
               className="input-field"
@@ -323,7 +397,7 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
           </label>
 
           <button type="submit" className="btn-primary" disabled={imageUploading}>
-            {imageUploading ? 'Uploading photo…' : 'Post Listing'}
+            {imageUploading ? 'Uploading photo…' : editingId ? 'Save Changes' : 'Post Listing'}
           </button>
         </form>
       )}
@@ -351,7 +425,7 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
                       You haven't posted any listings yet. Click <strong>+ Post Listing</strong> to add one.
                     </p>
                   ) : (
-                    <ListingsGrid items={myListings} user={user} onDelete={handleDelete} onAddToCart={addToCart} onGoToCheckout={onGoToCheckout} />
+                    <ListingsGrid items={myListings} user={user} onDelete={handleDelete} onEdit={startEdit} onAddToCart={addToCart} onGoToCheckout={onGoToCheckout} onCardClick={openPerformance} />
                   )}
                   <p className="mp-search-hint">
                     Search above to browse listings from other farmers.
@@ -372,7 +446,7 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
                   <p className="mp-section-label">
                     Search results for "{searchQuery}" ({searchResults.length})
                   </p>
-                  <ListingsGrid items={searchResults} user={user} onDelete={handleDelete} onAddToCart={addToCart} onGoToCheckout={onGoToCheckout} />
+                  <ListingsGrid items={searchResults} user={user} onDelete={handleDelete} onEdit={startEdit} onAddToCart={addToCart} onGoToCheckout={onGoToCheckout} onCardClick={openPerformance} />
                 </>
               )}
             </>
@@ -381,6 +455,15 @@ export default function Marketplace({ user, addToCart, onGoToCheckout }) {
       )}
 
       </>
+      )}
+
+      {detailListing && (
+        <ListingPerformanceModal
+          listing={detailListing}
+          loading={detailLoading}
+          error={detailError}
+          onClose={() => setDetailListing(null)}
+        />
       )}
 
     </div>
@@ -404,6 +487,7 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
         if (!order) return null; // RLS blocked the join — skip the row
         const isPending   = order.status === 'pending';
         const isConfirmed = order.status === 'confirmed';
+        const isTerminal   = order.status === 'delivered' || order.status === 'cancelled';
         return (
         <div key={order.id} className="mp-order-card card">
 
@@ -420,6 +504,11 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
               <span className={`mp-order-status mp-status-${order.status}`}>
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </span>
+              {order.payment_method === 'online' && (
+                <span className={`co-payment-badge co-payment-badge-${order.payment_status}`}>
+                  {order.payment_status === 'paid' ? '💳 Paid Online' : order.payment_status === 'failed' ? '⚠️ Payment Failed' : '💳 Awaiting Payment'}
+                </span>
+              )}
               {isPending && (
                 <div className="mp-order-actions">
                   <button
@@ -431,6 +520,8 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
                   <button
                     className="btn-danger mp-action-btn"
                     onClick={() => onStatusChange(order.id, 'cancelled')}
+                    disabled={order.payment_status === 'paid'}
+                    title={order.payment_status === 'paid' ? 'Paid online — refund before cancelling.' : undefined}
                   >
                     ✕ Cancel
                   </button>
@@ -443,6 +534,16 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
                     onClick={() => onStatusChange(order.id, 'delivered')}
                   >
                     📦 Mark Delivered
+                  </button>
+                </div>
+              )}
+              {isTerminal && (
+                <div className="mp-order-actions">
+                  <button
+                    className="btn-danger mp-action-btn"
+                    onClick={() => onStatusChange(order.id, 'removed')}
+                  >
+                    Remove
                   </button>
                 </div>
               )}
@@ -460,7 +561,7 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
                   <tr><td>Phone</td><td><a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a></td></tr>
                   <tr><td>Email</td><td><a href={`mailto:${order.customer_email}`}>{order.customer_email}</a></td></tr>
                   {order.customer_note && <tr><td>Note</td><td><em>{order.customer_note}</em></td></tr>}
-                  <tr><td>Shipping</td><td>{SHIP_LABELS[order.shipping_method] || order.shipping_method} (৳{order.shipping_fee})</td></tr>
+                  <tr><td>Shipping</td><td>{SHIP_LABELS[order.shipping_method] || order.shipping_method} (BDT {order.shipping_fee})</td></tr>
                 </tbody>
               </table>
             </div>
@@ -476,14 +577,14 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
                     <tr key={item.id}>
                       <td>{item.title}</td>
                       <td>{item.quantity}</td>
-                      <td>${Number(item.price).toFixed(2)}</td>
-                      <td><strong>${Number(item.item_subtotal).toFixed(2)}</strong></td>
+                      <td>BDT {Number(item.price).toFixed(2)}</td>
+                      <td><strong>BDT {Number(item.item_subtotal).toFixed(2)}</strong></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <p className="mp-order-your-total">
-                Your items total: <strong>${items.reduce((s, i) => s + Number(i.item_subtotal), 0).toFixed(2)}</strong>
+                Your items total: <strong>BDT {items.reduce((s, i) => s + Number(i.item_subtotal), 0).toFixed(2)}</strong>
               </p>
             </div>
           </div>
@@ -494,12 +595,55 @@ function SellerOrdersPanel({ orders, loading, error, onStatusChange }) {
   );
 }
 
-// Renders a grid of listing cards. "Add to Cart" is hidden for the owner's own listings.
-function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
+// Shown when one of "Your Listings" is clicked. Displays that listing's
+// details plus its lifetime sales, pulled in via the backend's RIGHT JOIN
+// across order_items/orders/marketplace_items/users (so a listing that's
+// never sold still shows 0s instead of an error).
+function ListingPerformanceModal({ listing, loading, error, onClose }) {
+  return (
+    <div className="mp-detail-overlay" onClick={onClose}>
+      <div className="mp-detail-dialog" onClick={(e) => e.stopPropagation()}>
+        <button className="mp-detail-close" onClick={onClose} type="button" aria-label="Close">✕</button>
+
+        {loading && <p className="ap-loading">Loading…</p>}
+        {error   && <p className="ap-error">{error}</p>}
+
+        {!loading && !error && (
+          <>
+            <h3 className="mp-card-title">{listing.title}</h3>
+            <span className="mp-category-badge">{listing.category}</span>
+            <div className="mp-price">BDT {Number(listing.price).toFixed(2)}</div>
+            <p className="mp-detail-status">Status: <strong>{listing.available ? 'Available' : 'Hidden'}</strong></p>
+
+            <div className="mp-detail-divider" />
+
+            <p className="mp-detail-section-label">Sales Performance</p>
+            <ul className="mp-detail-stats">
+              <li><span>Times ordered</span><strong>{listing.times_ordered}</strong></li>
+              <li><span>Units sold</span><strong>{listing.total_quantity_sold}</strong></li>
+              <li><span>Revenue</span><strong>BDT {Number(listing.total_revenue).toFixed(2)}</strong></li>
+            </ul>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Renders a grid of listing cards. "Add to Cart" is hidden for the owner's own
+// listings; those instead open the seller's sales-performance modal on click
+// (their action buttons stop that click from bubbling up to the card).
+function ListingsGrid({ items, user, onDelete, onEdit, onAddToCart, onGoToCheckout, onCardClick }) {
   return (
     <div className="mp-grid">
-      {items.map((item) => (
-        <div key={item.id} className="mp-card card">
+      {items.map((item) => {
+        const isOwner = user && user.id === item.user_id;
+        return (
+        <div
+          key={item.id}
+          className={`mp-card card ${isOwner ? 'mp-card-clickable' : ''}`}
+          onClick={isOwner ? () => onCardClick(item.id) : undefined}
+        >
           {item.image_url ? (
             <img src={item.image_url} alt={item.title} className="mp-card-image" />
           ) : (
@@ -508,7 +652,7 @@ function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
           <h3 className="mp-card-title">{item.title}</h3>
           <span className="mp-category-badge">{item.category}</span>
           <div className="mp-price">
-            ${Number(item.price).toFixed(2)}
+            BDT {Number(item.price).toFixed(2)}
             {item.unit && <span className="mp-unit"> {item.unit}</span>}
           </div>
           <p className="mp-description">{item.description}</p>
@@ -517,7 +661,7 @@ function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
           </div>
           <div className="mp-card-actions">
             {/* Only show "Add to Cart" for other people's listings, not your own */}
-            {user && user.id !== item.user_id && (
+            {user && !isOwner && (
               <button
                 className="btn-primary mp-cart-btn"
                 onClick={() => {
@@ -528,17 +672,23 @@ function ListingsGrid({ items, user, onDelete, onAddToCart, onGoToCheckout }) {
                 🛒 Add to Cart
               </button>
             )}
-            {user && user.id === item.user_id && (
+            {isOwner && (
               <span className="mp-own-badge">Your Listing</span>
             )}
-            {user && user.id === item.user_id && (
-              <button className="btn-danger" onClick={() => onDelete(item.id)}>
+            {isOwner && (
+              <button className="btn-primary" onClick={(e) => { e.stopPropagation(); onEdit(item); }}>
+                Edit
+              </button>
+            )}
+            {isOwner && (
+              <button className="btn-danger" onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}>
                 Remove
               </button>
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

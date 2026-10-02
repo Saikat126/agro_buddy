@@ -29,12 +29,15 @@ export function calculateDosage(weightKg, dosePerKg, concentration) {
 
 
 // Generates the list of dates when each dose should be given.
-// Example: start today, every 2 days, for 10 days → [day 0, 2, 4, 6, 8, 10]
+// durationDays is the total number of calendar days the treatment covers
+// (including the start date), so a 2-day treatment starting today only
+// ever falls on today and tomorrow — never a 3rd day.
+// Example: start today, every 2 days, for 10 days → [day 0, 2, 4, 6, 8]
 export function doseSchedule(startDate, frequencyDays, durationDays) {
   const schedule = [];
   let currentDate = new Date(startDate); // clone so we don't mutate the caller's date
 
-  for (let day = 0; day <= durationDays; day += frequencyDays) {
+  for (let day = 0; day < durationDays; day += frequencyDays) {
     const doseDate = new Date(currentDate);
     doseDate.setDate(doseDate.getDate() + day); // JS handles month rollover automatically
     schedule.push(doseDate);

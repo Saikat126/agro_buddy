@@ -42,6 +42,14 @@ export async function fetchTasksByCompletion(completed) {
 }
 
 
+// Fetches every task linked to a specific animal — used by the animal
+// profile's detail view, alongside its dosage records.
+export async function fetchTasksByAnimal(animalId) {
+  const { data } = await client.get('/tasks', { params: { animal_id: animalId } });
+  return data;
+}
+
+
 // Creates a new task. The component passes camelCase fields; the backend
 // accepts either camelCase or snake_case and attaches the current user itself.
 

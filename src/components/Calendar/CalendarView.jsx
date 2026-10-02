@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import './CalendarView.css';
 import { fetchEvents, createEvent, deleteEvent, deletePastEvents } from './CalendarAPI';
+import { fetchAnimals } from '../AnimalProfiles/AnimalProfilesAPI';
 import { useConfirm } from '../shared/useConfirm';
+import { capitalizedValue } from '../shared/textCase';
+import { buildAnimalOptions } from '../shared/animalOptions';
+import { toLocalDateString } from '../shared/localDate';
 
 // value must match the DB CHECK constraint exactly (lowercase);
 // label is what appears in the dropdown
@@ -38,13 +42,24 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
     title:      '',
     event_type: 'vet',
     notes:      '',
+    animal_id:  '',
   });
+
+  // Animals list for the optional "Link to animal" dropdown — this is what
+  // lets an animal profile's "Upcoming events" count actually find anything,
+  // since that count is driven entirely by calendar_events.animal_id.
+  const [animals, setAnimals] = useState([]);
+
+  const animalOptions = useMemo(() => buildAnimalOptions(animals), [animals]);
 
   // Load events when the component mounts and also after sign-in.
   // The component remounts via key={user.id} in App.jsx on user change,
   // so this effect runs fresh for each new session.
   useEffect(() => {
-    if (user) loadEvents();
+    if (user) {
+      loadEvents();
+      fetchAnimals().then(setAnimals).catch(() => {});
+    }
   }, [user]);
 
   async function loadEvents() {
@@ -63,13 +78,7 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
     }
   }
 
-  // Converts a Date object to 'YYYY-MM-DD' for comparison with the event_date strings
-  // stored in the database. Keeping everything as strings avoids timezone headaches.
-  function toDateString(date) {
-    return date.toISOString().split('T')[0];
-  }
-
-  const selectedDateStr = toDateString(selectedDate);
+  const selectedDateStr = toLocalDateString(selectedDate);
 
   // Events for the currently selected date — re-computed on every render,
   // which is fine since the events array is small
@@ -79,7 +88,7 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
   // react-calendar uses it as a prop and would re-render all tiles if it changed every time
   const tileContent = useCallback(
     ({ date }) => {
-      const hasEvent = events.some((ev) => ev.event_date === toDateString(date));
+      const hasEvent = events.some((ev) => ev.event_date === toLocalDateString(date));
       // A small green dot on any date that has at least one event
       return hasEvent ? <span className="cv-dot" /> : null;
     },
@@ -87,8 +96,8 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
   );
 
   function handleInputChange(e) {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: capitalizedValue(e) }));
   }
 
   async function handleAddEvent(e) {
@@ -104,12 +113,13 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
         title:      formData.title,
         event_type: formData.event_type,
         notes:      formData.notes,
+        animal_id:  formData.animal_id || null,
         event_date: selectedDateStr, // use the currently selected date
       });
 
       // Append to local state so the dot and event list update immediately
       setEvents((prev) => [...prev, newEvent]);
-      setFormData({ title: '', event_type: 'vet', notes: '' });
+      setFormData({ title: '', event_type: 'vet', notes: '', animal_id: '' });
       setShowForm(false);
     } catch (err) {
       setError('Failed to add event.');
@@ -160,7 +170,7 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
               <button
                 className="btn-primary"
                 onClick={() => {
-                  if (showForm) setFormData({ title: '', event_type: 'vet', notes: '' });
+                  if (showForm) setFormData({ title: '', event_type: 'vet', notes: '', animal_id: '' });
                   setShowForm((p) => !p);
                 }}
               >
@@ -207,6 +217,21 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
                   </label>
 
                   <label className="ap-label">
+                    Link to Animal (optional)
+                    <select
+                      className="input-field"
+                      name="animal_id"
+                      value={formData.animal_id}
+                      onChange={handleInputChange}
+                    >
+                      <option value="">— None —</option>
+                      {animalOptions.map((a) => (
+                        <option key={a.id} value={a.id}>{a.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="ap-label">
                     Notes
                     <textarea
                       className="input-field"
@@ -233,6 +258,11 @@ export default function CalendarView({ user, autoAdd, onClearAutoAdd }) {
                         {EVENT_TYPES.find((t) => t.value === ev.event_type)?.label || ev.event_type}
                       </span>
                       <strong className="cv-event-title">{ev.title}</strong>
+                      {ev.animal_id && (
+                        <span className="cv-event-animal">
+                          🐾 {animals.find((a) => a.id === ev.animal_id)?.name || 'Linked animal'}
+                        </span>
+                      )}
                       {ev.notes && <p className="cv-event-notes">{ev.notes}</p>}
                       <button
                         className="btn-danger"

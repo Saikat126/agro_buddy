@@ -10,7 +10,9 @@ import {
   fetchDosageRecords,
   deleteDosageRecord,
 } from './DosageCalculatorAPI';
+import { fetchAnimals } from '../AnimalProfiles/AnimalProfilesAPI';
 import { useConfirm } from '../shared/useConfirm';
+import { capitalizedValue } from '../shared/textCase';
 
 // Flips 'yyyy-mm-dd' to 'dd-mm-yyyy' for display in the history table
 function fmtDate(iso) {
@@ -23,6 +25,7 @@ export default function DosageCalculator() {
   const { confirm, dialog } = useConfirm();
 
   const [inputs, setInputs] = useState({
+    animalId:      '',
     animalName:    '',
     medication:    '',
     weightKg:      '',
@@ -32,6 +35,15 @@ export default function DosageCalculator() {
     frequencyDays: '1',
     durationDays:  '7',
   });
+
+  // The user's saved animal profiles, so a dosage record can be properly
+  // linked (animal_id) instead of only carrying a free-text name — without
+  // this link, the record never shows up in that animal's health overview.
+  const [animals, setAnimals] = useState([]);
+
+  useEffect(() => {
+    fetchAnimals().then(setAnimals).catch(() => {});
+  }, []);
 
   const [result,   setResult]   = useState(null);  // { totalMg, totalMl, warning }
   const [schedule, setSchedule] = useState([]);     // array of Date objects for each dose
@@ -63,10 +75,32 @@ export default function DosageCalculator() {
   }
 
   function handleChange(e) {
-    const { name, value } = e.target;
+    const { name } = e.target;
     // Changing any input invalidates the current result, so reset the save button
     setSaveStatus('idle');
-    setInputs((prev) => ({ ...prev, [name]: value }));
+    setInputs((prev) => ({ ...prev, [name]: capitalizedValue(e) }));
+  }
+
+  // Selecting a saved animal links the record (animal_id) and prefills the
+  // name field, which then locks to read-only — once linked, the animal's
+  // actual name is always the source of truth (enforced again server-side),
+  // so it can't be edited into disagreeing with what it's linked to.
+  //
+  // Weight is different: it's only ever a snapshot of what the animal
+  // weighed for *this* treatment, not a live-locked identity field, so it's
+  // prefilled from the profile's last recorded weight as a convenient
+  // default but stays freely editable — the animal may have been weighed
+  // more recently than its profile reflects.
+  function handleAnimalSelect(e) {
+    const id = e.target.value;
+    const animal = animals.find((a) => a.id === id);
+    setSaveStatus('idle');
+    setInputs((prev) => ({
+      ...prev,
+      animalId: id,
+      animalName: animal ? animal.name : prev.animalName,
+      weightKg: animal?.weight_kg != null ? String(animal.weight_kg) : prev.weightKg,
+    }));
   }
 
   function handleCalculate(e) {
@@ -116,6 +150,7 @@ export default function DosageCalculator() {
       setSaveStatus('saving');
 
       await saveDosageRecord({
+        animal_id:      inputs.animalId || null,
         animal_name:    inputs.animalName.trim(),
         medication:     inputs.medication.trim(),
         weight_kg:      parseFloat(inputs.weightKg),
@@ -148,7 +183,7 @@ export default function DosageCalculator() {
 
   function handleReset() {
     setInputs({
-      animalName: '', medication: '', weightKg: '', dosePerKg: '',
+      animalId: '', animalName: '', medication: '', weightKg: '', dosePerKg: '',
       concentration: '', startDate: '', frequencyDays: '1', durationDays: '7',
     });
     setResult(null);
@@ -171,9 +206,25 @@ export default function DosageCalculator() {
 
       <form className="dc-form card" onSubmit={handleCalculate}>
 
+        {animals.length > 0 && (
+          <label className="ap-label">
+            Link to Animal Profile (optional)
+            <select
+              className="input-field"
+              value={inputs.animalId}
+              onChange={handleAnimalSelect}
+            >
+              <option value="">— Not linked to a saved profile —</option>
+              {animals.map((a) => (
+                <option key={a.id} value={a.id}>{a.name} ({a.species})</option>
+              ))}
+            </select>
+          </label>
+        )}
+
         <div className="dc-row">
           <label className="ap-label">
-            Animal Name / ID
+            Animal Name
             <input
               className="input-field"
               type="text"
@@ -181,6 +232,8 @@ export default function DosageCalculator() {
               value={inputs.animalName}
               onChange={handleChange}
               placeholder="e.g. Bessie"
+              readOnly={!!inputs.animalId}
+              title={inputs.animalId ? 'Linked to a profile — name follows it automatically.' : undefined}
             />
           </label>
 

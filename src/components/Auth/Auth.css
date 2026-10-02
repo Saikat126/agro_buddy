@@ -139,6 +139,23 @@
   text-shadow: 0 1px 10px rgba(255, 255, 255, 0.6);
 }
 
+/* Live username-availability feedback under the Username field */
+.auth-username-hint {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #6b7280;
+}
+
+.auth-username-ok {
+  color: #15803d;
+}
+
+.auth-username-bad {
+  color: #dc2626;
+}
+
 /* Error message box */
 .auth-error {
   background: #83eeb3;

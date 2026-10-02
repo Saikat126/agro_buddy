@@ -23,10 +23,15 @@ function validate(data) {
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
-// GET /api/calendar?year=&month=&type=
+// GET /api/calendar?year=&month=&type=&animal_id=
 router.get('/', asyncHandler(async (req, res) => {
   let sql = 'SELECT * FROM calendar_events WHERE user_id = ?';
   const params = [req.userId];
+
+  if (req.query.animal_id) {
+    sql += ' AND animal_id = ?';
+    params.push(req.query.animal_id);
+  }
 
   if (req.query.year && req.query.month) {
     const mm = String(req.query.month).padStart(2, '0');

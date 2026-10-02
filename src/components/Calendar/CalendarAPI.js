@@ -54,6 +54,14 @@ export async function fetchEventsByType(eventType) {
 }
 
 
+// Fetches every event linked to a specific animal — used by the animal
+// profile's detail view, alongside its dosage records and tasks.
+export async function fetchEventsByAnimal(animalId) {
+  const { data } = await client.get('/calendar', { params: { animal_id: animalId } });
+  return data;
+}
+
+
 // Saves a new event. completed defaults to false — the user can mark it done later.
 export async function createEvent(eventData) {
   const errors = validateEventData(eventData);

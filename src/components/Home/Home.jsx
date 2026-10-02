@@ -3,6 +3,7 @@ import './Home.css';
 import { fetchTasks }   from '../TaskList/TaskListAPI';
 import { fetchAnimals } from '../AnimalProfiles/AnimalProfilesAPI';
 import { fetchEvents }  from '../Calendar/CalendarAPI';
+import { toLocalDateString } from '../shared/localDate';
 
 // One entry per feature — clicking any card navigates to that tab.
 // id must match the tab id in App.jsx so onTabChange(f.id) works.
@@ -27,18 +28,25 @@ export default function Home({ user, onTabChange }) {
   // We re-run when `user` changes so the dashboard loads fresh after sign-in.
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     setDashLoading(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalDateString(new Date());
 
     // Promise.all fires all three requests at the same time instead of one after the other
     Promise.all([fetchTasks(), fetchAnimals(), fetchEvents()])
       .then(([t, a, ev]) => {
+        // Discard if a newer run (e.g. a different user) has already started —
+        // otherwise a slow request for the previous account can resolve late
+        // and overwrite the current account's data with stale data.
+        if (cancelled) return;
         setTasks(t.filter((task) => !task.completed));
         setAnimals(a);
         setEvents(ev.filter((e) => !e.completed && e.event_date >= today));
       })
       .catch(console.error)
-      .finally(() => setDashLoading(false));
+      .finally(() => { if (!cancelled) setDashLoading(false); });
+
+    return () => { cancelled = true; };
   }, [user]);
 
   // Cap each dashboard panel at a few items — it's a preview, not a full list
@@ -85,26 +93,27 @@ export default function Home({ user, onTabChange }) {
           )}
         </div>
 
-        {/* Live counts shown as floating stat chips — only visible when logged in */}
+        {/* Live counts shown as floating stat chips — only visible when logged in.
+            Each one is clickable and jumps straight to that section. */}
         {user && (
           <div className="home-hero-stats">
-            <div className="home-stat-card">
+            <button className="home-stat-card" onClick={() => onTabChange('animals')}>
               <span className="home-stat-num">{animals.length}</span>
               <span className="home-stat-label">Animals</span>
-            </div>
-            <div className="home-stat-card">
+            </button>
+            <button className="home-stat-card" onClick={() => onTabChange('tasks')}>
               {/* Separate counts for one-off tasks and repeating ones */}
               <span className="home-stat-num">{tasks.filter(t => !t.isRepeating).length}</span>
               <span className="home-stat-label">Active Tasks</span>
-            </div>
-            <div className="home-stat-card">
+            </button>
+            <button className="home-stat-card" onClick={() => onTabChange('tasks')}>
               <span className="home-stat-num">{tasks.filter(t => t.isRepeating).length}</span>
-              <span className="home-stat-label">Repeating</span>
-            </div>
-            <div className="home-stat-card">
+              <span className="home-stat-label">Repeating Tasks</span>
+            </button>
+            <button className="home-stat-card" onClick={() => onTabChange('calendar')}>
               <span className="home-stat-num">{events.length}</span>
-              <span className="home-stat-label">Events</span>
-            </div>
+              <span className="home-stat-label">Upcoming Events</span>
+            </button>
           </div>
         )}
 
@@ -148,8 +157,15 @@ export default function Home({ user, onTabChange }) {
                     <ul className="home-task-list">
                       {activeTasks.map((task) => (
                         <li key={task.id} className="home-task-row">
-                          {/* Dot color is driven by priority level */}
-                          <span className="home-task-dot" style={{ background: PRIORITY_COLORS[task.priority] || '#16a34a' }} />
+                          {/* Dot color is driven by priority level. `color` (not just
+                              background) is set too since the CSS halo uses currentColor. */}
+                          <span
+                            className="home-task-dot"
+                            style={{
+                              background: PRIORITY_COLORS[task.priority] || '#16a34a',
+                              color: PRIORITY_COLORS[task.priority] || '#16a34a',
+                            }}
+                          />
                           <span className="home-task-title">{task.title}</span>
                           {task.isRepeating && <span className="home-task-repeat">↻</span>}
                         </li>
@@ -273,6 +289,10 @@ export default function Home({ user, onTabChange }) {
             { name: 'Soykot Sikder',        initials: 'SS', color: '#16a34a', photo: 'soykot.jpeg'  },
             { name: 'Zubayer Ahmed',         initials: 'ZA', color: '#2563eb', photo: 'zubayer.jpeg' },
             { name: 'Md. Faiad Ahmed Sajid', initials: 'FS', color: '#d97706', photo: 'faiad.jpeg'   },
+            // Placeholders — swap in the real name/initials/color and drop a
+            // matching photo into /public once they're ready.
+            { name: 'Rashid Naim',   initials: 'RN', color: '#7c3aed', photo: 'rashid.jpeg'  },
+            { name: 'Khandaker Tanver Ahmed', initials: 'TA', color: '#be185d', photo: 'tanver.jpeg' },
           ].map((member) => (
             <div key={member.name} className="home-credit-card card">
               <div className="home-credit-avatar-wrap" style={{ borderColor: member.color }}>

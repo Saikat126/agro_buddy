@@ -1,16 +1,6 @@
 import client from '../../api/client';
 
 
-// Works out the last day of the treatment from the start date + duration.
-// We do this in JS (rather than letting the DB compute it) so the UI can
-// show the end date in real-time while the user is still filling out the form.
-export function computeEndDate(startDate, durationDays) {
-  const start = new Date(startDate);
-  start.setDate(start.getDate() + Number(durationDays)); // JS handles month rollover
-  return start.toISOString().split('T')[0]; // strip the time part → 'YYYY-MM-DD'
-}
-
-
 // Validates every field before we touch the database.
 // All numeric fields must be positive; start_date must be a real date.
 export function validateDosageRecord(record) {

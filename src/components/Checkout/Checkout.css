@@ -38,13 +38,19 @@
   margin-bottom: 14px;
 }
 
-/* Full-width place order button */
-.co-place-btn {
-  width: 100%;
+/* Place order + cancel buttons side by side */
+.co-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.co-place-btn,
+.co-cancel-btn {
+  flex: 1;
   justify-content: center;
   padding: 12px;
   font-size: 1rem;
-  margin-top: 8px;
 }
 
 /* Cart items table */
@@ -194,6 +200,9 @@
 /* Payment method */
 .co-payment {
   margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .co-payment-option {
@@ -201,12 +210,22 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border: 2px solid var(--color-primary);
+  border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
+  background: var(--color-bg);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.co-payment-option.co-payment-active {
+  border-color: var(--color-primary);
   background: var(--color-primary-lt);
+}
+
+.co-payment-option input[type="radio"] {
+  accent-color: var(--color-primary);
 }
 
 /* Empty cart hint bar */
@@ -234,6 +253,94 @@
 
 .co-card-status {
   width: fit-content;
+}
+
+.co-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.co-payment-badge {
+  width: fit-content;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.co-payment-badge-paid {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.co-payment-badge-unpaid {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.co-payment-badge-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.co-retry-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 10px;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.co-remove-order-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 10px;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+/* Payment-return banner — shown after SSLCommerz redirects back from the gateway */
+.co-payment-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.co-payment-banner-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.co-payment-banner-fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.co-payment-banner-cancel {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.co-banner-dismiss {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.co-banner-dismiss:hover {
+  opacity: 1;
 }
 
 .co-card-id {
@@ -264,7 +371,13 @@
 .co-card-items li {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   font-size: 0.88rem;
+}
+
+.co-card-item-info {
+  display: flex;
+  flex-direction: column;
 }
 
 .co-card-item-title {

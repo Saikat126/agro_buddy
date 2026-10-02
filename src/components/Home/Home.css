@@ -142,14 +142,25 @@
 }
 
 .home-stat-card {
-  background: rgba(0,0,0,0.35);
-  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.35);
   border-radius: 14px;
-  padding: 18px 32px;
+  padding: 16px 28px;
   text-align: center;
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  min-width: 120px;
+  min-width: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.home-stat-card:hover {
+  background: rgba(0,0,0,0.65);
+  border-color: rgba(255,255,255,0.6);
+  transform: translateY(-2px);
 }
 
 .home-stat-num {
@@ -163,11 +174,12 @@
 .home-stat-label {
   display: block;
   font-size: 0.78rem;
-  color: rgba(255,255,255,0.7);
-  font-weight: 600;
+  color: rgba(255,255,255,0.92);
+  font-weight: 700;
   letter-spacing: 0.5px;
   margin-top: 4px;
   text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
 /* Wave divider */
@@ -213,53 +225,107 @@
 
 /* ── Dashboard ────────────────────────────────────────────────────────────── */
 .home-dashboard {
+  position: relative;
+  overflow: hidden;
   padding: 48px 60px 40px;
+  background: linear-gradient(180deg, #f3f8f4 0%, var(--color-bg) 100%);
+}
+
+/* Soft colorful blurred shapes behind the panels — this is what the glass
+   panels are actually "frosting" over. Purely decorative (z-index below the
+   grid), sized/placed so they peek through without needing to be looked at
+   directly. */
+.home-dashboard::before,
+.home-dashboard::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.home-dashboard::before {
+  width: 380px;
+  height: 380px;
+  top: -140px;
+  left: 4%;
+  background: radial-gradient(circle, rgba(37,99,235,0.35), transparent 70%);
+}
+
+.home-dashboard::after {
+  width: 420px;
+  height: 420px;
+  bottom: -180px;
+  right: 6%;
+  background: radial-gradient(circle, rgba(22,163,74,0.32), transparent 70%);
 }
 
 .home-dash-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: 200px;
-  gap: 18px;
+  grid-auto-rows: 230px;
+  gap: 22px;
   margin-top: 20px;
 }
 
-/* Panel — base */
+/* Panel — frosted glass: translucent + blurred so the colorful shapes behind
+   it show through softly instead of being fully hidden or fully visible. */
 .home-panel {
   padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   height: 100%;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  border-top: 2px solid var(--panel-accent, var(--color-border));
+  position: relative;
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 20px;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 28px var(--panel-shadow, rgba(0,0,0,0.10));
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .home-panel:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px var(--panel-shadow, rgba(0,0,0,0.09)), 0 2px 8px rgba(0,0,0,0.04);
+  transform: translateY(-4px);
+  background: rgba(255,255,255,0.68);
+  box-shadow: 0 16px 36px var(--panel-shadow, rgba(0,0,0,0.18));
 }
 
-/* Per-panel accent tokens */
-.home-panel--tasks   { --panel-accent: #2563eb; --panel-bg: #eff6ff; --panel-shadow: rgba(37,99,235,0.13); }
-.home-panel--animals { --panel-accent: #16a34a; --panel-bg: #f0fdf4; --panel-shadow: rgba(22,163,74,0.13); }
-.home-panel--events  { --panel-accent: #0891b2; --panel-bg: #ecfeff; --panel-shadow: rgba(8,145,178,0.13); }
+/* Per-panel accent tokens — --panel-rgb is the same color as --panel-accent,
+   split into raw components so rgba() below can vary the alpha. */
+.home-panel--tasks   { --panel-accent: #2563eb; --panel-accent-dk: #1d4ed8; --panel-rgb: 37,99,235;  --panel-bg: #eff6ff; --panel-shadow: rgba(37,99,235,0.22); }
+.home-panel--animals { --panel-accent: #16a34a; --panel-accent-dk: #15803d; --panel-rgb: 22,163,74;  --panel-bg: #f0fdf4; --panel-shadow: rgba(22,163,74,0.22); }
+.home-panel--events  { --panel-accent: #0891b2; --panel-accent-dk: #0e7490; --panel-rgb: 8,145,178;  --panel-bg: #ecfeff; --panel-shadow: rgba(8,145,178,0.22); }
 
-/* Header */
+/* Header — a translucent, slightly blurred tint of the panel's accent rather
+   than a solid block, so it reads as part of the same glass surface. */
 .home-panel-header {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 10px 14px 9px;
-  background: linear-gradient(180deg, var(--panel-bg, #f9fafb) 0%, #fff 100%);
-  border-bottom: 1px solid var(--color-border);
+  gap: 11px;
+  padding: 14px 16px;
+  background: linear-gradient(120deg, rgba(var(--panel-rgb), 0.88) 0%, rgba(var(--panel-rgb), 0.62) 100%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255,255,255,0.35);
   flex-shrink: 0;
 }
 
 .home-panel-icon {
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   line-height: 1;
   flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.25);
+  border-radius: 10px;
 }
 
 .home-panel-info {
@@ -268,9 +334,9 @@
 }
 
 .home-panel-title {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #fff;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -278,26 +344,26 @@
 }
 
 .home-panel-meta {
-  font-size: 0.68rem;
-  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.85);
   margin: 1px 0 0;
 }
 
 .home-panel-actions {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
-/* "+" add button */
+/* "+" add button — glassy, sits on the colored header */
 .home-panel-add-btn {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--panel-bg, #f3f4f6);
-  border: 1.5px solid var(--panel-accent, var(--color-border));
-  color: var(--panel-accent, var(--color-primary));
+  background: rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255,255,255,0.55);
+  color: #fff;
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
@@ -305,34 +371,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.14s, color 0.14s;
+  transition: background 0.14s, transform 0.14s;
   padding: 0;
 }
 
 .home-panel-add-btn:hover {
-  background: var(--panel-accent, var(--color-primary));
-  color: #fff;
+  background: #fff;
+  color: var(--panel-accent-dk, var(--color-primary));
+  transform: scale(1.06);
 }
 
-/* "All →" pill */
+/* "All →" pill — glassy, sits on the colored header */
 .home-panel-link {
-  background: var(--panel-bg, #f3f4f6);
-  border: 1.5px solid var(--panel-accent, var(--color-border));
+  background: rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255,255,255,0.55);
   border-radius: 20px;
-  color: var(--panel-accent, var(--color-primary));
+  color: #fff;
   font-size: 0.76rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   padding: 5px 13px;
-  transition: background 0.14s, color 0.14s;
+  transition: background 0.14s, color 0.14s, transform 0.14s;
   letter-spacing: 0.1px;
 }
 
 .home-panel-link:hover {
-  background: var(--panel-accent, var(--color-primary));
-  color: #fff;
-  border-color: var(--panel-accent, var(--color-primary));
+  background: #fff;
+  color: var(--panel-accent-dk, var(--color-primary));
+  transform: scale(1.06);
 }
 
 /* Empty state */
@@ -358,25 +425,27 @@
 .home-task-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--color-border);
-  transition: background 0.1s ease;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.5);
+  transition: background 0.15s ease;
 }
 
 .home-task-row:last-child { border-bottom: none; }
-.home-task-row:hover { background: #f9fafb; }
+.home-task-row:hover { background: rgba(var(--panel-rgb), 0.08); }
 
 .home-task-dot {
-  width: 6px;
-  height: 6px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px currentColor;
+  opacity: 0.9;
 }
 
 .home-task-title {
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--color-text);
   flex: 1;
   white-space: nowrap;
@@ -385,26 +454,26 @@
 }
 
 .home-task-repeat {
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  color: var(--panel-accent, var(--color-text-muted));
   flex-shrink: 0;
 }
 
 /* ── Badges ── */
 .home-badge {
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 3px 9px;
   border-radius: 20px;
   text-transform: capitalize;
   letter-spacing: 0.2px;
   flex-shrink: 0;
 }
 
-.home-badge-event-vet        { background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; }
-.home-badge-event-harvest    { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-.home-badge-event-market     { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-.home-badge-event-medication { background: #faf5ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.home-badge-event-vet        { background: #fce7f3; color: #be185d; border: 1px solid #fbcfe8; }
+.home-badge-event-harvest    { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.home-badge-event-market     { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.home-badge-event-medication { background: #ede9fe; color: #7c3aed; border: 1px solid #ddd6fe; }
 .home-badge-event-other      { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
 
 /* ── Event list ── */
@@ -420,21 +489,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--color-border);
-  transition: background 0.1s ease;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.5);
+  transition: background 0.15s ease;
 }
 
 .home-event-row:last-child { border-bottom: none; }
-.home-event-row:hover { background: #f9fafb; }
+.home-event-row:hover { background: rgba(var(--panel-rgb), 0.08); }
 
-/* ── Animal grid ── */
+/* ── Animal grid ──
+   align-content: start (rows pack at the top) used to leave the container's
+   own background color showing through the unused space below/right when
+   there were only 1-2 animals — background is transparent now so that space
+   just reads as empty panel instead of a stray gray block. */
 .home-animal-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--color-border);
-  border-top: 1px solid var(--color-border);
+  gap: 10px;
+  background: transparent;
+  padding: 12px;
   flex: 1;
   overflow-y: auto;
   min-height: 0;
@@ -442,27 +515,34 @@
 }
 
 .home-animal-card {
-  background: var(--color-surface);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 6px;
-  transition: background 0.1s ease;
+  gap: 6px;
+  padding: 12px 6px;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.home-animal-card:hover { background: #f9fafb; }
+.home-animal-card:hover {
+  background: rgba(255,255,255,0.85);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
 
 .home-animal-avatar {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 800;
   color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
 .home-animal-name {
@@ -590,7 +670,7 @@
 
 /* ── Credits ──────────────────────────────────────────────────────────────── */
 .home-credits {
-  padding: 64px 60px 56px;
+  padding: 40px 60px 36px;
   text-align: center;
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
@@ -598,18 +678,18 @@
 }
 
 .home-credits-team-name {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 900;
   color: var(--color-text);
   letter-spacing: -0.5px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .home-credits-grid {
   display: flex;
   justify-content: center;
-  gap: 28px;
-  margin-top: 32px;
+  gap: 16px;
+  margin-top: 20px;
   flex-wrap: wrap;
 }
 
@@ -617,24 +697,24 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 36px 48px;
+  gap: 10px;
+  padding: 18px 22px;
   margin-bottom: 0;
-  min-width: 220px;
+  min-width: 140px;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .home-credit-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(22,163,74,0.18);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(22,163,74,0.16);
 }
 
 .home-credit-avatar-wrap {
-  width: 120px;
-  height: 120px;
-  border-radius: 14px;
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
   border: 3px solid;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
@@ -652,13 +732,13 @@
   height: 100%;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: #fff;
 }
 
 .home-credit-name {
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--color-text);
   text-align: center;

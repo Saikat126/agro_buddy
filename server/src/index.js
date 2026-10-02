@@ -12,6 +12,7 @@ const calendarRoutes    = require('./routes/calendar.routes');
 const vetsRoutes        = require('./routes/vets.routes');
 const dosageRoutes      = require('./routes/dosage.routes');
 const ordersRoutes      = require('./routes/orders.routes');
+const paymentsRoutes    = require('./routes/payments.routes');
 const uploadsRoutes     = require('./routes/uploads.routes');
 const { UPLOAD_ROOT }   = require('./middleware/upload');
 
@@ -19,6 +20,10 @@ const app = express();
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000' }));
 app.use(express.json());
+// SSLCommerz posts its ipn/success/fail/cancel callbacks as
+// application/x-www-form-urlencoded, not JSON — without this, req.body is
+// empty for every one of them.
+app.use(express.urlencoded({ extended: true }));
 
 // Serves everything under server/uploads/ at http://localhost:PORT/uploads/...
 // — the local stand-in for what Supabase Storage's public buckets used to do.
@@ -34,6 +39,7 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/vets', vetsRoutes);
 app.use('/api/dosage', dosageRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/payments', paymentsRoutes);
 app.use('/api/uploads', uploadsRoutes);
 
 // Catches multer errors (bad file type, too large) and anything else that

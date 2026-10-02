@@ -50,12 +50,12 @@ export async function fetchAnimals() {
 }
 
 
-// Fetches a single animal by id.
-export async function fetchAnimalById(id) {
-  const { data } = await client.get('/animals');
-  const animal = data.find((a) => a.id === id);
-  if (!animal) throw new Error('Animal not found.');
-  return animal;
+// Fetches one animal's full details plus counts of its dosage records,
+// upcoming events, and open tasks — powers the detail view opened by
+// clicking an animal's card.
+export async function fetchAnimalDetail(id) {
+  const { data } = await client.get(`/animals/${id}`);
+  return data;
 }
 
 

@@ -26,16 +26,52 @@ function normalize(row) {
     id: row.id, userId: row.user_id, title: row.title, dueDate: row.due_date,
     priority: row.priority, completed: !!row.completed, isRepeating: !!row.is_repeating,
     animalId: row.animal_id, notes: row.notes, createdAt: row.created_at,
+    dosageRecordId: row.dosage_record_id,
   };
 }
 
-// GET /api/tasks?completed=true|false
+// Keeps every dosage-linked reminder task in sync with its treatment window,
+// recomputed fresh against CURRENT_DATE() on every call — this is what makes
+// "due date updates every day" work without a cron job: whichever day the
+// user actually opens their task list, this brings it up to date for that day.
+async function syncDosageTasks(userId) {
+  // The treatment window has closed — auto-complete the reminder for good.
+  await pool.query(
+    `UPDATE tasks t
+     JOIN dosage_records d ON d.id = t.dosage_record_id
+     SET t.completed = TRUE, t.is_repeating = FALSE
+     WHERE t.user_id = ? AND t.completed = FALSE AND d.end_date < CURRENT_DATE()`,
+    [userId]
+  );
+  // Within the window AND it's actually opened — keep the reminder due
+  // today. d.start_date <= CURRENT_DATE() matters: a dosage record created
+  // with a future start date must keep its original (future) due_date until
+  // that day actually arrives, not get pulled forward to "due today" the
+  // moment anyone opens the task list.
+  await pool.query(
+    `UPDATE tasks t
+     JOIN dosage_records d ON d.id = t.dosage_record_id
+     SET t.due_date = CURRENT_DATE()
+     WHERE t.user_id = ? AND t.completed = FALSE
+       AND d.start_date <= CURRENT_DATE() AND d.end_date >= CURRENT_DATE()
+       AND t.due_date <> CURRENT_DATE()`,
+    [userId]
+  );
+}
+
+// GET /api/tasks?completed=true|false&animal_id=
 router.get('/', asyncHandler(async (req, res) => {
+  await syncDosageTasks(req.userId);
+
   let sql = 'SELECT * FROM tasks WHERE user_id = ?';
   const params = [req.userId];
   if (req.query.completed === 'true' || req.query.completed === 'false') {
     sql += ' AND completed = ?';
     params.push(req.query.completed === 'true' ? 1 : 0);
+  }
+  if (req.query.animal_id) {
+    sql += ' AND animal_id = ?';
+    params.push(req.query.animal_id);
   }
   sql += ' ORDER BY (due_date IS NULL), due_date ASC';
   const [rows] = await pool.query(sql, params);

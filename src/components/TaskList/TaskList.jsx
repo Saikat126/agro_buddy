@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './TaskList.css';
 import { fetchTasks, createTask, toggleTaskComplete, deleteTask } from './TaskListAPI';
+import { fetchAnimals } from '../AnimalProfiles/AnimalProfilesAPI';
 import { useConfirm } from '../shared/useConfirm';
+import { capitalizedValue } from '../shared/textCase';
+import { buildAnimalOptions } from '../shared/animalOptions';
 
 // Defined outside the component so this array isn't re-created on every render
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'];
@@ -28,10 +31,17 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
     dueDate:     '',
     priority:    'Medium',
     isRepeating: false,
+    animalId:    '',
   });
+
+  // Animals list for the optional "Link to animal" dropdown on the task form
+  const [animals, setAnimals] = useState([]);
+
+  const animalOptions = useMemo(() => buildAnimalOptions(animals), [animals]);
 
   useEffect(() => {
     loadTasks();
+    fetchAnimals().then(setAnimals).catch(() => {});
   }, []);
 
   async function loadTasks() {
@@ -65,9 +75,9 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
   }, [tasks, filter]);
 
   function handleInputChange(e) {
-    const { name, value, type, checked } = e.target;
+    const { name, type, checked } = e.target;
     // Checkboxes have a `checked` property instead of `value`
-    setFormData((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    setFormData((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : capitalizedValue(e) }));
   }
 
   async function handleAddTask(e) {
@@ -82,7 +92,7 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
       const newTask = await createTask({ ...formData, completed: false });
       // Prepend so the new task appears at the top of the list immediately
       setTasks((prev) => [newTask, ...prev]);
-      setFormData({ title: '', dueDate: '', priority: 'Medium', isRepeating: false });
+      setFormData({ title: '', dueDate: '', priority: 'Medium', isRepeating: false, animalId: '' });
       setShowForm(false);
     } catch (err) {
       setError('Failed to add task.');
@@ -93,7 +103,9 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
   async function handleToggle(task) {
     // Repeating tasks are designed to never be "done" — skip them
     if (task.isRepeating) return;
-    const newCompleted = !task.completed;
+    // A completed non-repeating task is done for good — no un-completing it
+    if (task.completed) return;
+    const newCompleted = true;
 
     try {
       // Optimistic update: change the UI instantly so it feels snappy,
@@ -138,7 +150,7 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
       <div className="tl-header">
         <h2 className="section-title">Task List</h2>
         <button className="btn-primary" onClick={() => {
-          if (showForm) setFormData({ title: '', dueDate: '', priority: 'Medium', isRepeating: false });
+          if (showForm) setFormData({ title: '', dueDate: '', priority: 'Medium', isRepeating: false, animalId: '' });
           setShowForm((p) => !p);
         }}>
           {showForm ? 'Cancel' : '+ Add Task'}
@@ -201,6 +213,21 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
             </label>
           </div>
 
+          <label className="ap-label">
+            Link to Animal (optional)
+            <select
+              className="input-field"
+              name="animalId"
+              value={formData.animalId}
+              onChange={handleInputChange}
+            >
+              <option value="">— None —</option>
+              {animalOptions.map((a) => (
+                <option key={a.id} value={a.id}>{a.label}</option>
+              ))}
+            </select>
+          </label>
+
           <label className="tl-repeat-label">
             <input
               type="checkbox"
@@ -228,32 +255,42 @@ export default function TaskList({ autoAdd, onClearAutoAdd }) {
             key={task.id}
             className={`tl-item card ${task.completed ? 'completed' : ''} ${task.isRepeating ? 'repeating' : ''}`}
           >
-            {/* Repeating tasks show a loop icon instead of a checkbox because they can't be completed */}
+            {/* Repeating tasks (including dosage reminders, which are also
+                repeating under the hood) show an icon instead of a Done
+                button, since they run their own course instead of being
+                manually completed. */}
             {task.isRepeating ? (
-              <span className="tl-repeat-icon" title="Repeating task">↻</span>
+              task.dosageRecordId
+                ? <span className="tl-repeat-icon" title="Active treatment — due date updates automatically">💊</span>
+                : <span className="tl-repeat-icon" title="Repeating task">↻</span>
             ) : (
-              <input
-                type="checkbox"
-                className="tl-checkbox"
-                checked={task.completed}
-                onChange={() => handleToggle(task)}
-              />
+              <button
+                type="button"
+                className={`tl-done-btn ${task.completed ? 'is-done' : ''}`}
+                onClick={() => handleToggle(task)}
+                disabled={task.completed}
+                title={task.completed ? 'Completed tasks cannot be undone' : undefined}
+              >
+                {task.completed ? '✓ Done' : 'Mark Done'}
+              </button>
             )}
 
             <div className="tl-body">
-              <span className="tl-title">{task.title}</span>
+              <div className="tl-title-row">
+                <span className="tl-title">{task.title}</span>
+                <span className={`tl-priority ${priorityClass(task.priority)}`}>
+                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                </span>
+                {task.isRepeating && (
+                  <span className="tl-repeat-badge">{task.dosageRecordId ? 'Treatment' : 'Repeating'}</span>
+                )}
+              </div>
               <div className="tl-meta">
                 {task.dueDate && (
                   // Flip from YYYY-MM-DD to DD-MM-YYYY for display
                   <span className="tl-date">
                     Due: {task.dueDate.split('-').reverse().join('-')}
                   </span>
-                )}
-                <span className={`tl-priority ${priorityClass(task.priority)}`}>
-                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                </span>
-                {task.isRepeating && (
-                  <span className="tl-repeat-badge">Repeating</span>
                 )}
               </div>
             </div>

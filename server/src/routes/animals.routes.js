@@ -31,6 +31,20 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
+// GET /api/animals/:id — one animal's full details plus counts of its related
+// records (dosage history, upcoming events, open tasks), from the
+// animal_health_summary view (see src/db/09_views.sql) — a LEFT JOIN across
+// animals, dosage_records, calendar_events, and tasks so an animal with zero
+// related records still comes back with 0 counts instead of a missing row.
+router.get('/:id', asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    'SELECT * FROM animal_health_summary WHERE id = ? AND user_id = ?',
+    [req.params.id, req.userId]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Animal not found.' });
+  res.json(rows[0]);
+}));
+
 // POST /api/animals
 router.post('/', asyncHandler(async (req, res) => {
   const errors = validate(req.body);

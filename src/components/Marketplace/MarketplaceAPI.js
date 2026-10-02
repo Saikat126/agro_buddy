@@ -75,6 +75,15 @@ export async function fetchMyListings() {
 }
 
 
+// Fetches one of the caller's own listings plus its sales totals — including
+// a listing that has never sold. Powers the detail view opened by clicking
+// one of "Your Listings".
+export async function fetchListingPerformance(id) {
+  const { data } = await client.get(`/marketplace/${id}/performance`);
+  return data;
+}
+
+
 // Publishes a new listing. available is set to true by default so it shows up immediately.
 export async function createListing(listingData) {
   const errors = validateListingData(listingData);

@@ -4,7 +4,7 @@
 import React from 'react';
 import './ConfirmDialog.css';
 
-export default function ConfirmDialog({ message, onConfirm, onCancel }) {
+export default function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'Delete', undoable = false }) {
   return (
     // Clicking the dark overlay dismisses the dialog (same as clicking Cancel)
     <div className="confirm-overlay" onClick={onCancel}>
@@ -14,10 +14,10 @@ export default function ConfirmDialog({ message, onConfirm, onCancel }) {
       <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="confirm-icon">⚠</div>
         <p className="confirm-title">Are you sure?</p>
-        <p className="confirm-message">{message} This action cannot be undone.</p>
+        <p className="confirm-message">{message}{!undoable && ' This action cannot be undone.'}</p>
         <div className="confirm-actions">
           <button className="confirm-cancel" onClick={onCancel}>Cancel</button>
-          <button className="confirm-delete" onClick={onConfirm}>Delete</button>
+          <button className="confirm-delete" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>

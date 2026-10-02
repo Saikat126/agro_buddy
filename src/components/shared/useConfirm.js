@@ -12,31 +12,33 @@ import React from 'react';
 import ConfirmDialog from './ConfirmDialog';
 
 export function useConfirm() {
-  const [state, setState] = useState({ open: false, message: '', resolve: null });
+  const [state, setState] = useState({ open: false, message: '', options: {}, resolve: null });
 
-  // Opens the dialog and returns a promise that won't settle until the user clicks
-  function confirm(message) {
+  // Opens the dialog and returns a promise that won't settle until the user clicks.
+  // options: { confirmLabel, undoable } — see ConfirmDialog for defaults.
+  function confirm(message, options = {}) {
     return new Promise((resolve) => {
-      setState({ open: true, message, resolve });
+      setState({ open: true, message, options, resolve });
     });
   }
 
   // User clicked "Delete" — resolve the promise with true so the caller proceeds
   function handleConfirm() {
     state.resolve(true);
-    setState({ open: false, message: '', resolve: null });
+    setState({ open: false, message: '', options: {}, resolve: null });
   }
 
   // User clicked "Cancel" or the overlay — resolve with false so the caller bails out
   function handleCancel() {
     state.resolve(false);
-    setState({ open: false, message: '', resolve: null });
+    setState({ open: false, message: '', options: {}, resolve: null });
   }
 
   // null when the dialog is closed so nothing extra renders in the DOM
   const dialog = state.open
     ? React.createElement(ConfirmDialog, {
         message:   state.message,
+        ...state.options,
         onConfirm: handleConfirm,
         onCancel:  handleCancel,
       })

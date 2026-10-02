@@ -7,6 +7,13 @@
   margin-bottom: 24px;
 }
 
+.ap-form {
+  /* The navbar is position: sticky at 64px tall and sits above everything
+     (z-index: 200) — without this, scrollIntoView's default target-to-top
+     alignment lands the form right under it, hiding the heading/top fields. */
+  scroll-margin-top: 80px;
+}
+
 .ap-form-title {
   font-size: 1rem;
   font-weight: 700;
@@ -81,6 +88,13 @@
   gap: 16px;
 }
 
+/* Years + Months inputs side-by-side within the Age cell above */
+.ap-age-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 /* Responsive animal card grid */
 .ap-grid {
   display: grid;
@@ -134,4 +148,233 @@
 
 .ap-details strong {
   color: var(--color-text);
+}
+
+/* Cards open the detail modal on click */
+.ap-card-clickable {
+  cursor: pointer;
+}
+
+/* ── Animal detail modal ── */
+.ap-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.ap-detail-dialog {
+  position: relative;
+  background: var(--color-surface, #fff);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ap-detail-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.ap-detail-close:hover {
+  background: var(--color-primary-lt);
+  color: var(--color-primary-dk);
+}
+
+.ap-detail-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+
+.ap-detail-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 6px 0;
+}
+
+.ap-detail-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ap-detail-stats {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-detail-stats li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.ap-detail-stats strong {
+  color: var(--color-text);
+}
+
+/* "Edit Profile" button inside the detail modal */
+.ap-detail-edit-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+/* Dosage records list inside the detail modal */
+.ap-dosage-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-dosage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.ap-dosage-med {
+  font-weight: 700;
+  color: var(--color-text);
+  flex: 1;
+  min-width: 100px;
+}
+
+.ap-dosage-dates {
+  color: var(--color-text-muted);
+}
+
+.ap-dosage-vol {
+  color: var(--color-primary-dk);
+  font-weight: 600;
+}
+
+.ap-task-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-task-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.ap-task-row.ap-task-done {
+  opacity: 0.6;
+}
+
+.ap-task-title {
+  font-weight: 700;
+  color: var(--color-text);
+  flex: 1;
+  min-width: 100px;
+}
+
+.ap-task-row.ap-task-done .ap-task-title {
+  text-decoration: line-through;
+}
+
+.ap-task-due {
+  color: var(--color-text-muted);
+}
+
+.ap-task-status {
+  color: var(--color-primary-dk);
+  font-weight: 600;
+}
+
+.ap-task-row.ap-task-done .ap-task-status {
+  color: var(--color-text-muted);
+}
+
+.ap-event-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-event-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.ap-event-row.ap-event-done {
+  opacity: 0.6;
+}
+
+.ap-event-type {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--color-primary-lt);
+  color: var(--color-primary-dk);
+  padding: 2px 9px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.ap-event-title {
+  font-weight: 700;
+  color: var(--color-text);
+  flex: 1;
+  min-width: 100px;
+}
+
+.ap-event-date {
+  color: var(--color-text-muted);
 }

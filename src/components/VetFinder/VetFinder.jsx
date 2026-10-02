@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './VetFinder.css';
 import { searchVets, createVet, deleteVet } from './VetFinderAPI';
 import { useConfirm } from '../shared/useConfirm';
+import { capitalizedValue } from '../shared/textCase';
 
 export default function VetFinder({ user }) {
 
@@ -69,8 +70,8 @@ export default function VetFinder({ user }) {
   }, [searchQuery]);
 
   function handleInputChange(e) {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: capitalizedValue(e) }));
   }
 
   async function handleAddVet(e) {
